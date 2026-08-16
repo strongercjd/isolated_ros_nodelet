@@ -1,0 +1,19 @@
+<?xml version="1.0"?>
+<!-- catkin 功能包清单。export/nodelet 指向 pluginlib 描述文件。 -->
+<package format="2">
+  <name>my_nodelet_plugin</name>
+  <version>0.1.0</version>
+  <description>Isolated Talker/Listener nodelet plugin for demo verification.</description>
+  <maintainer email="dev@example.com">isolated_ros_nodelet_workspace</maintainer>
+  <license>BSD</license>
+
+  <buildtool_depend>catkin</buildtool_depend>
+  <depend>nodelet</depend>
+  <depend>pluginlib</depend>
+  <depend>roscpp</depend>
+  <depend>std_msgs</depend>
+
+  <export>
+    <nodelet plugin="${prefix}/nodelet_plugins.xml"/>
+  </export>
+</package>

@@ -1,0 +1,25 @@
+{
+  "version": 1,
+  "node": "custom_mini_manager",
+  "defaults": {
+    "library_dir": "lib"
+  },
+  "plugins": [
+    {
+      "name": "/talker",
+      "class": "my_nodelet_plugin::TalkerNodelet",
+      "library": "libmy_nodelet_plugin.so",
+      "enabled": true,
+      "remap": {},
+      "args": []
+    },
+    {
+      "name": "/listener",
+      "class": "my_nodelet_plugin::ListenerNodelet",
+      "library": "libmy_nodelet_plugin.so",
+      "enabled": true,
+      "remap": {},
+      "args": []
+    }
+  ]
+}

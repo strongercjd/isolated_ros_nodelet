@@ -1,0 +1,20 @@
+Archived - ROS 1 End-of-life
+============================
+
+This repository contains ROS 1 packages.
+The last supported ROS 1 release, ROS Noetic, `officially reached end of life on May 31st, 2025 <https://bit.ly/NoeticEOL>`_.
+
+Robot Operating System (ROS)
+===============================================================================
+
+ROS is a meta-operating system for your robot.  It provides
+language-independent and network-transparent communication for a
+distributed robot control system.
+
+Installation Notes
+------------------
+
+For full installation instructions, including system prerequisites and
+platform-specific help, see:
+
+  http://wiki.ros.org/ROS/Installation

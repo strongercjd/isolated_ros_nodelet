@@ -1,0 +1,28 @@
+# --- 官方全量（official_full.sh）---
+official_full_build/
+official_full_install/
+official_full_runtime/
+official_full_logs/
+
+# --- 定制最小（custom_mini.sh）---
+custom_mini_build/
+custom_mini_install/
+custom_mini_runtime/
+custom_mini_logs/
+
+.catkin_workspace
+
+# --- 运行日志 ---
+.ros_minimal/
+
+
+# --- 杂项 ---
+__pycache__/
+*.pyc
+*.pyo
+*.o
+*.a
+*~
+.DS_Store
+.idea/
+.vscode/
