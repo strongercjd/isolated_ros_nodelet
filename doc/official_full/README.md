@@ -23,48 +23,48 @@
 | `.catkin` | 空标记文件，让 `CMAKE_PREFIX_PATH` 被当成 catkin 工作空间 |
 | `run.sh` | 启动 roscore → manager → load Talker / Listener |
 
-下面「来源」均由 `./official_full.sh build` 编进 `official_full_install/`，再由 `package` 拷到这里。
+下面「来源」是上游仓库；「本仓库」是对应的 `src/` 目录。均由 `./official_full.sh build` 编进 `official_full_install/`，再由 `package` 拷到这里。
 
 ## `bin/`
 
-| 文件 | 作用 | 来源 |
-|------|------|------|
-| `roscore` | 拉起 Master + `/rosout` | [ros/ros_comm](https://github.com/ros/ros_comm)（`tools/roslaunch`） |
-| `rosmaster` | ROS Master（Python） | [ros/ros_comm](https://github.com/ros/ros_comm) |
-| `rosrun` | 按包名找并执行 `lib/<pkg>/<exe>`（bash） | [ros/ros](https://github.com/ros/ros)（`tools/rosbash`） |
-| `rosnode` | 等 `/rosout`、`/nodelet_manager` 是否就绪 | [ros/ros_comm](https://github.com/ros/ros_comm) |
-| `rosversion` | `roscore.xml` 写入 `/rosversion`、`/rosdistro` | pip 包 `rospkg`（装进 `official_full_install/`） |
-| `rospack` | 按包名解析 `share/<pkg>` | [ros/rospack](https://github.com/ros/rospack) |
-| `catkin_find` | `rosrun` 用来定位 `lib/<pkg>` | [ros/catkin](https://github.com/ros/catkin) |
+| 文件 | 作用 | 来源 | 本仓库 |
+|------|------|------|--------|
+| `roscore` | 拉起 Master + `/rosout` | [ros/ros_comm](https://github.com/ros/ros_comm)（`tools/roslaunch`） | `src/ros_comm` |
+| `rosmaster` | ROS Master（Python） | [ros/ros_comm](https://github.com/ros/ros_comm) | `src/ros_comm` |
+| `rosrun` | 按包名找并执行 `lib/<pkg>/<exe>`（bash） | [ros/ros](https://github.com/ros/ros)（`tools/rosbash`） | `src/ros` |
+| `rosnode` | 等 `/rosout`、`/nodelet_manager` 是否就绪 | [ros/ros_comm](https://github.com/ros/ros_comm) | `src/ros_comm` |
+| `rosversion` | `roscore.xml` 写入 `/rosversion`、`/rosdistro` | pip 包 `rospkg`（装进 `official_full_install/`） | —（非 `src/`） |
+| `rospack` | 按包名解析 `share/<pkg>` | [ros/rospack](https://github.com/ros/rospack) | `src/rospack` |
+| `catkin_find` | `rosrun` 用来定位 `lib/<pkg>` | [ros/catkin](https://github.com/ros/catkin) | `src/catkin` |
 
 ## `lib/`
 
 ### 可执行文件
 
-| 文件 | 作用 | 来源 |
-|------|------|------|
-| `lib/nodelet/nodelet` | 官方 nodelet 管理器 / `load` | [ros/nodelet_core](https://github.com/ros/nodelet_core) |
-| `lib/rosout/rosout` | 系统日志节点（`roscore` 拉起） | [ros/ros_comm](https://github.com/ros/ros_comm) |
+| 文件 | 作用 | 来源 | 本仓库 |
+|------|------|------|--------|
+| `lib/nodelet/nodelet` | 官方 nodelet 管理器 / `load` | [ros/nodelet_core](https://github.com/ros/nodelet_core) | `src/nodelet_core` |
+| `lib/rosout/rosout` | 系统日志节点（`roscore` 拉起） | [ros/ros_comm](https://github.com/ros/ros_comm) | `src/ros_comm` |
 
 ### 共享库
 
-| 文件 | 作用 | 来源 |
-|------|------|------|
-| `libmy_nodelet_plugin.so` | Talker / Listener Nodelet | 本仓库 `src/my_nodelet_plugin` |
-| `libnodeletlib.so` | Nodelet 基类与进程内加载 | [ros/nodelet_core](https://github.com/ros/nodelet_core) |
-| `libclass_loader.so` | 按路径加载 `.so` 里的 C++ 类 | [ros/class_loader](https://github.com/ros/class_loader) |
-| `libbondcpp.so` | Nodelet 与 loader 之间的心跳 | [ros/bond_core](https://github.com/ros/bond_core) |
-| `libroscpp.so` | C++ ROS 客户端 | [ros/ros_comm](https://github.com/ros/ros_comm) |
-| `libxmlrpcpp.so` | 与 Master 通信的 XML-RPC | [ros/ros_comm](https://github.com/ros/ros_comm) |
-| `librosconsole.so` / `librosconsole_print.so` / `librosconsole_backend_interface.so` | `ROS_INFO` 等日志 | [ros/rosconsole](https://github.com/ros/rosconsole) |
-| `libroscpp_serialization.so` / `libcpp_common.so` / `librostime.so` | 消息序列化、公共类型、时间 | [ros/roscpp_core](https://github.com/ros/roscpp_core) |
-| `libroslib.so` | 包路径等辅助 | [ros/ros](https://github.com/ros/ros) |
-| `librospack.so` | 按包名查找 | [ros/rospack](https://github.com/ros/rospack) |
-| `libboost_*.so.1.71.0` | Boost 1.71 | [Boost 1.71.0](https://www.boost.org/users/history/version_1_71_0.html) |
-| `libconsole_bridge.so.1.0` | ROS 与底层日志桥 | [ros/console_bridge](https://github.com/ros/console_bridge) |
-| `libPocoFoundation.so.88` | `class_loader` 的 `dlopen` 后端 | [pocoproject/poco](https://github.com/pocoproject/poco) |
-| `libtinyxml2.so.8` | XML 解析 | [leethomason/tinyxml2](https://github.com/leethomason/tinyxml2) |
-| `libuuid.so.1` | UUID（bondcpp） | 本仓库 `src/libuuid` |
+| 文件 | 作用 | 来源 | 本仓库 |
+|------|------|------|--------|
+| `libmy_nodelet_plugin.so` | Talker / Listener Nodelet | 本仓库编写 | `src/my_nodelet_plugin` |
+| `libnodeletlib.so` | Nodelet 基类与进程内加载 | [ros/nodelet_core](https://github.com/ros/nodelet_core) | `src/nodelet_core` |
+| `libclass_loader.so` | 按路径加载 `.so` 里的 C++ 类 | [ros/class_loader](https://github.com/ros/class_loader) | `src/class_loader` |
+| `libbondcpp.so` | Nodelet 与 loader 之间的心跳 | [ros/bond_core](https://github.com/ros/bond_core) | `src/bond_core` |
+| `libroscpp.so` | C++ ROS 客户端 | [ros/ros_comm](https://github.com/ros/ros_comm) | `src/ros_comm` |
+| `libxmlrpcpp.so` | 与 Master 通信的 XML-RPC | [ros/ros_comm](https://github.com/ros/ros_comm) | `src/ros_comm` |
+| `librosconsole.so` / `librosconsole_print.so` / `librosconsole_backend_interface.so` | `ROS_INFO` 等日志 | [ros/rosconsole](https://github.com/ros/rosconsole) | `src/rosconsole` |
+| `libroscpp_serialization.so` / `libcpp_common.so` / `librostime.so` | 消息序列化、公共类型、时间 | [ros/roscpp_core](https://github.com/ros/roscpp_core) | `src/roscpp_core` |
+| `libroslib.so` | 包路径等辅助 | [ros/ros](https://github.com/ros/ros) | `src/ros` |
+| `librospack.so` | 按包名查找 | [ros/rospack](https://github.com/ros/rospack) | `src/rospack` |
+| `libboost_*.so.1.71.0` | Boost 1.71 | [Boost 1.71.0](https://www.boost.org/users/history/version_1_71_0.html) | `src/boost` |
+| `libconsole_bridge.so.1.0` | ROS 与底层日志桥 | [ros/console_bridge](https://github.com/ros/console_bridge) | `src/console_bridge` |
+| `libPocoFoundation.so.88` | `class_loader` 的 `dlopen` 后端 | [pocoproject/poco](https://github.com/pocoproject/poco) | `src/poco` |
+| `libtinyxml2.so.8` | XML 解析 | [leethomason/tinyxml2](https://github.com/leethomason/tinyxml2) | `src/tinyxml2` |
+| `libuuid.so.1` | UUID（bondcpp） | 本仓库编写 | `src/libuuid` |
 
 `libc` / `libstdc++` 等系统库不打包。
 
@@ -76,10 +76,16 @@
 
 官方 `pluginlib` / `rosrun` / `roslaunch` 按包名找描述文件。至少需要：
 
-| 目录 | 作用 | 来源 |
-|------|------|------|
-| `my_nodelet_plugin/` | `package.xml` + `nodelet_plugins.xml`（Talker / Listener 类名） | 本仓库 `src/my_nodelet_plugin` |
-| `nodelet/` | 官方 nodelet 包清单 | [ros/nodelet_core](https://github.com/ros/nodelet_core) |
-| `rosout/` / `roslaunch/` / `ros/` | `roscore` 找 `rosout`、读 `roscore.xml` | [ros/ros_comm](https://github.com/ros/ros_comm)、[ros/ros](https://github.com/ros/ros) |
-| `pluginlib/` / `class_loader/` / `rospack/` | 插件与包查找 | 对应 ROS 仓库 |
-| `roscpp/` / `std_msgs/` / `rosgraph_msgs/` / `bond/` | 消息/依赖清单 | 对应 ROS 仓库 |
+| 目录 | 作用 | 来源 | 本仓库 |
+|------|------|------|--------|
+| `my_nodelet_plugin/` | `package.xml` + `nodelet_plugins.xml`（Talker / Listener 类名） | 本仓库编写 | `src/my_nodelet_plugin` |
+| `nodelet/` | 官方 nodelet 包清单 | [ros/nodelet_core](https://github.com/ros/nodelet_core) | `src/nodelet_core` |
+| `rosout/` / `roslaunch/` | `roscore` 找 `rosout`、读 `roscore.xml` | [ros/ros_comm](https://github.com/ros/ros_comm) | `src/ros_comm` |
+| `ros/` | `roscore.xml` 等 | [ros/ros](https://github.com/ros/ros) | `src/ros` |
+| `pluginlib/` | 按 XML 加载插件 | [ros/pluginlib](https://github.com/ros/pluginlib) | `src/pluginlib` |
+| `class_loader/` | 插件加载器清单 | [ros/class_loader](https://github.com/ros/class_loader) | `src/class_loader` |
+| `rospack/` | 按包名查找 | [ros/rospack](https://github.com/ros/rospack) | `src/rospack` |
+| `roscpp/` | C++ 客户端清单 | [ros/ros_comm](https://github.com/ros/ros_comm) | `src/ros_comm` |
+| `std_msgs/` | 标准消息清单 | [ros/std_msgs](https://github.com/ros/std_msgs) | `src/std_msgs` |
+| `rosgraph_msgs/` | Master / 图消息清单 | [ros/ros_comm_msgs](https://github.com/ros/ros_comm_msgs) | `src/ros_comm_msgs` |
+| `bond/` | 心跳消息清单 | [ros/bond_core](https://github.com/ros/bond_core) | `src/bond_core` |
