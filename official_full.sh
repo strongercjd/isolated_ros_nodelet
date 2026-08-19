@@ -400,14 +400,16 @@ build_boost() {
     return 0
   fi
   mkdir -p "${SRC}/boost"
+  local srcdir="${SRC}/boost/boost_1_71_0"
   local tarball="${SRC}/boost/boost_1_71_0.tar.gz"
-  if [[ ! -f "${tarball}" ]]; then
-    log "download Boost 1.71.0 from archives.boost.io (fallback: sourceforge)"
-    if ! curl_get "https://archives.boost.io/release/1.71.0/source/boost_1_71_0.tar.gz" "${tarball}"; then
-      curl_get "https://sourceforge.net/projects/boost/files/boost/1.71.0/boost_1_71_0.tar.gz/download" "${tarball}"
+  # 源码目录已在仓库里时不必再下 tar.gz。
+  if [[ ! -d "${srcdir}" ]]; then
+    if [[ ! -f "${tarball}" ]]; then
+      log "download Boost 1.71.0 from archives.boost.io (fallback: sourceforge)"
+      if ! curl_get "https://archives.boost.io/release/1.71.0/source/boost_1_71_0.tar.gz" "${tarball}"; then
+        curl_get "https://sourceforge.net/projects/boost/files/boost/1.71.0/boost_1_71_0.tar.gz/download" "${tarball}"
+      fi
     fi
-  fi
-  if [[ ! -d "${SRC}/boost/boost_1_71_0" ]]; then
     tar -xzf "${tarball}" -C "${SRC}/boost"
   fi
   patch_boost_171
