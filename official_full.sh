@@ -94,6 +94,22 @@ fail() {
   exit 1
 }
 
+# git 检出常把脚本存成 100644。给带真实 shebang 的文件补 +x。
+# cmake configure_file 会把模板权限拷到生成的 env.sh 等。
+# 跳过 #!@...（如 _setup_util.py.in / script.py.in）：上游就是 644，
+# 安装态由 catkin_install_python(PROGRAMS) 再设可执行位。
+chmod_shebang_files() {
+  local f head
+  [[ $# -gt 0 ]] || return 0
+  while IFS= read -r -d '' f; do
+    head="$(head -c 3 "${f}" 2>/dev/null || true)"
+    [[ "${head}" == '#!@' ]] && continue
+    if [[ "${head:0:2}" == '#!' ]]; then
+      chmod +x "${f}" 2>/dev/null || true
+    fi
+  done < <(find "$@" -type f -print0 2>/dev/null)
+}
+
 # 跑一个步骤：stdout/stderr 进 logs/<name>.log；失败时把末尾 80 行打到终端。
 # 注意：函数体内临时 set +e，才能拿到真实退出码（否则 set -e 会直接杀进程）。
 run_logged() {
@@ -400,21 +416,21 @@ build_boost() {
     return 0
   fi
   mkdir -p "${SRC}/boost"
-  local srcdir="${SRC}/boost/boost_1_71_0"
   local tarball="${SRC}/boost/boost_1_71_0.tar.gz"
-  # 源码目录已在仓库里时不必再下 tar.gz。
-  if [[ ! -d "${srcdir}" ]]; then
-    if [[ ! -f "${tarball}" ]]; then
-      log "download Boost 1.71.0 from archives.boost.io (fallback: sourceforge)"
-      if ! curl_get "https://archives.boost.io/release/1.71.0/source/boost_1_71_0.tar.gz" "${tarball}"; then
-        curl_get "https://sourceforge.net/projects/boost/files/boost/1.71.0/boost_1_71_0.tar.gz/download" "${tarball}"
-      fi
+  if [[ ! -f "${tarball}" ]]; then
+    log "download Boost 1.71.0 from archives.boost.io (fallback: sourceforge)"
+    if ! curl_get "https://archives.boost.io/release/1.71.0/source/boost_1_71_0.tar.gz" "${tarball}"; then
+      curl_get "https://sourceforge.net/projects/boost/files/boost/1.71.0/boost_1_71_0.tar.gz/download" "${tarball}"
     fi
+  fi
+  if [[ ! -d "${SRC}/boost/boost_1_71_0" ]]; then
     tar -xzf "${tarball}" -C "${SRC}/boost"
   fi
   patch_boost_171
   (
     cd "${SRC}/boost/boost_1_71_0"
+    chmod +x ./bootstrap.sh tools/build/src/engine/build.sh 2>/dev/null || true
+    chmod +x ./b2 2>/dev/null || true
     # 目录改名后旧 project-config.jam 仍指向 install/，必须按当前 INSTALL 重跑 bootstrap
     if [[ ! -x ./b2 ]] || ! grep -q "option.set prefix : ${INSTALL} ;" project-config.jam 2>/dev/null; then
       ./bootstrap.sh --prefix="${INSTALL}" \
@@ -490,6 +506,13 @@ fetch_ros() {
 # ROSCONSOLE_BACKEND=print：不链 log4cxx，少一个系统依赖。
 # Boost / UUID 全部指到本仓库 install，防止 FindBoost 捡到系统包。
 build_ros() {
+  chmod +x "${SRC}/catkin/bin/"* 2>/dev/null || true
+  chmod_shebang_files "${SRC}/catkin/cmake/templates" "${SRC}/catkin/bin"
+  # _setup_util.py.in 上游是 644（#!@ 不在上面统一 chmod）。但 configure_file 会把
+  # 模板权限拷到 devel/_setup_util.py，而 setup.sh 要直接执行它；必须给模板 +x。
+  chmod +x "${SRC}/catkin/cmake/templates/_setup_util.py.in" 2>/dev/null || true
+  # 已生成的副本若仍是 644，cmake 可能先执行再覆盖。
+  find "${DEVEL_ISOLATED}" "${INSTALL}" -name '_setup_util.py' -exec chmod +x {} + 2>/dev/null || true
   [[ -x "${SRC}/catkin/bin/catkin_make_isolated" ]] || fail "catkin_make_isolated missing"
   python3 -c "import catkin_pkg, em, yaml, rospkg" \
     || fail "python deps missing (catkin_pkg/empy/PyYAML/rospkg)"
