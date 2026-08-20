@@ -1,13 +1,8 @@
-/**
- * ListenerNodelet 实现。
- *
- * 订阅相对话题名 chatter（在 manager 的名称空间下通常解析为 /chatter）。
- */
-#include "my_nodelet_plugin/listener_nodelet.h"
+#include "listener_nodelet/listener_nodelet.h"
 
 #include <pluginlib/class_list_macros.h>
 
-namespace my_nodelet_plugin
+namespace listener_nodelet
 {
 
 ListenerNodelet::ListenerNodelet() {}
@@ -26,6 +21,6 @@ void ListenerNodelet::callback(const std_msgs::String::ConstPtr& msg)
   NODELET_INFO("Received: %s", msg->data.c_str());
 }
 
-}  // namespace my_nodelet_plugin
+}  // namespace listener_nodelet
 
-PLUGINLIB_EXPORT_CLASS(my_nodelet_plugin::ListenerNodelet, nodelet::Nodelet)
+PLUGINLIB_EXPORT_CLASS(listener_nodelet::ListenerNodelet, nodelet::Nodelet)

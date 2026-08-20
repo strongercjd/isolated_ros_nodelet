@@ -2,12 +2,12 @@
 # =============================================================================
 # official_full.sh
 # -----------------------------------------------------------------------------
-# 官方全量：从源码编一套完全隔离的 ROS Noetic + Nodelet demo。
+# 官方全量：从源码编一套完全隔离的 ROS Noetic（仅 ROS 栈，不含 app/）。
 # 产物只进本仓库目录，不写 /opt/ros、不装系统 ros-* / libboost-*-dev。
 #
 # 子命令（无参数 = help）：
-#   ./official_full.sh build     编译 → official_full_build/ + official_full_install/
-#   ./official_full.sh package   从 install 抽出最小运行目录 official_full_runtime/
+#   ./official_full.sh build     编译 ROS → official_full_build/ + official_full_install/
+#   ./official_full.sh package   从 install 抽出最小运行目录；插件来自 app/*/make.sh
 #   ./official_full.sh run       执行 official_full_runtime/run.sh
 #   ./official_full.sh clean     删除 official_full_build/，保留 install 与 runtime
 #   ./official_full.sh help      参数说明
@@ -50,14 +50,15 @@ cmd_help() {
   cat <<EOF
 用法: $0 <build|package|run|clean|help>
 
-  build     官方全量编译隔离 ROS Noetic + my_nodelet_plugin
+  build     官方全量编译隔离 ROS Noetic（不含 app/ 应用层）
             中间文件: ${BUILD_DIR}
             安装目录: ${INSTALL}
             日志: ${LOG_DIR}
 
   package   从 ${INSTALL} 抽出可拷贝的最小运行目录 ${RUNTIME}
             含 bin/ lib/ python/ share/，README.md / run.sh 指向 ${DOC}
-            前提: build 已成功（需要 roscore、nodelet、插件 .so）
+            前提: build 已成功；Talker/Listener 需已用 app/*/make.sh
+            对着 ${INSTALL} 编过（ROS_INSTALL=${INSTALL} ./make.sh x86）
 
   run       执行 ${RUNTIME}/run.sh（只用 runtime 自己，不依赖 install）
             前提: 已执行 package
@@ -475,6 +476,14 @@ fetch_ros() {
   fetch_github ros nodelet_core "${SRC}/nodelet_core" noetic-devel kinetic-devel indigo-devel
   fetch_github ros bond_core "${SRC}/bond_core" noetic-devel kinetic-devel
 
+  # 应用层插件在 app/，已改为独立 CMake（无 catkin）；勿软链进 src/。
+  for stale in my_nodelet_plugin my_talker_nodelet my_listener_nodelet talker_nodelet listener_nodelet; do
+    if [[ -L "${SRC}/${stale}" ]]; then
+      rm -f "${SRC}/${stale}"
+      log "removed stale symlink src/${stale}"
+    fi
+  done
+
   # Packages not needed for the Talker/Listener demo (extra deps: lz4, bzip2, ...).
   ignore_package rosbag
   ignore_package rosbag_storage
@@ -499,10 +508,10 @@ fetch_ros() {
 }
 
 # ---------------------------------------------------------------------------
-# 4) catkin 隔离编译：ROS 核心 + my_nodelet_plugin -> install/
+# 4) catkin 隔离编译：仅 ROS 核心 -> install/
 # ---------------------------------------------------------------------------
 # --source "${SRC}"：src/ 下带 package.xml 的目录都会被扫到。
-# custom_mini 没有 package.xml，不会被编进来。
+# talker/listener 在 app/，由各自 make.sh 编译；本脚本不编应用层。
 # ROSCONSOLE_BACKEND=print：不链 log4cxx，少一个系统依赖。
 # Boost / UUID 全部指到本仓库 install，防止 FindBoost 捡到系统包。
 build_ros() {
@@ -688,11 +697,19 @@ link_doc() {
 }
 
 # -----------------------------------------------------------------------------
-# build：九步，每步一份分日志
+# build：只编 ROS 栈（应用层见 app/*/make.sh）
 # -----------------------------------------------------------------------------
 cmd_build() {
+  # 避免误把插件软链编进本环境
+  for stale in my_nodelet_plugin my_talker_nodelet my_listener_nodelet talker_nodelet listener_nodelet; do
+    if [[ -L "${SRC}/${stale}" ]]; then
+      rm -f "${SRC}/${stale}"
+      log "removed stale symlink ${SRC}/${stale}"
+    fi
+  done
+
   prepare_build_env
-  log "==== isolated ROS Noetic nodelet workspace full build ===="
+  log "==== isolated ROS Noetic nodelet workspace full build（不含 app/）===="
   log "ROOT=${ROOT}  JOBS=${JOBS}"
   log "isolation: install prefix=${INSTALL}"
 
@@ -708,7 +725,42 @@ cmd_build() {
 
   log "==== BUILD SUCCESS ===="
   log "Install tree: ${INSTALL}"
+  log "应用层请自行: ROS_INSTALL=${INSTALL} (cd app/<pkg> && ./make.sh x86)"
   log "下一步: $0 package"
+}
+
+# 在 app/<pkg>/build 里找 lib<pkg>.so（本脚本不编应用层，须用户先 make.sh）。
+find_app_so() {
+  local pkg="$1"
+  local so=""
+  local f
+  for f in \
+    "${ROOT}/app/${pkg}/build/lib${pkg}.so" \
+    "${ROOT}/app/${pkg}/build/lib/lib${pkg}.so"
+  do
+    if [[ -f "${f}" ]]; then
+      printf '%s\n' "${f}"
+      return 0
+    fi
+  done
+  so="$(find "${ROOT}/app/${pkg}/build" -name "lib${pkg}.so" -type f 2>/dev/null | head -n 1 || true)"
+  [[ -n "${so}" ]] || return 1
+  printf '%s\n' "${so}"
+}
+
+# 把 app/<pkg> 的 package.xml + nodelet_plugins.xml 装进 runtime/share/<pkg>/。
+install_app_share() {
+  local pkg="$1"
+  local dest="${RUNTIME}/share/${pkg}"
+  mkdir -p "${dest}"
+  [[ -f "${ROOT}/app/${pkg}/nodelet_plugins.xml" ]] \
+    || fail "缺少 app/${pkg}/nodelet_plugins.xml"
+  cp -a "${ROOT}/app/${pkg}/nodelet_plugins.xml" "${dest}/"
+  if [[ -f "${ROOT}/app/${pkg}/package.xml" ]]; then
+    cp -a "${ROOT}/app/${pkg}/package.xml" "${dest}/"
+  else
+    fail "缺少 app/${pkg}/package.xml（官方 nodelet load 需要）"
+  fi
 }
 
 # -----------------------------------------------------------------------------
@@ -717,9 +769,10 @@ cmd_build() {
 # 缺关键文件就失败，不要生成半残 runtime。
 # .catkin：空标记即可。没有它，CMAKE_PREFIX_PATH 不会被当成 catkin 工作空间，
 # roslaunch / rosrun 就找不到 lib/rosout/rosout、lib/nodelet/nodelet。
+# Talker/Listener 来自 app/*/make.sh（须 ROS_INSTALL 指向本 install）。
 cmd_package() {
   local nodelet_bin="${INSTALL}/lib/nodelet/nodelet"
-  local plugin="${INSTALL}/lib/libmy_nodelet_plugin.so"
+  local talker listener
   [[ -x "${INSTALL}/bin/roscore" ]] || fail "缺少 ${INSTALL}/bin/roscore，请先成功完成: $0 build"
   [[ -x "${INSTALL}/bin/rosmaster" ]] || fail "缺少 ${INSTALL}/bin/rosmaster，请先成功完成: $0 build"
   [[ -x "${INSTALL}/bin/rosrun" ]] || fail "缺少 ${INSTALL}/bin/rosrun，请先成功完成: $0 build"
@@ -727,7 +780,10 @@ cmd_package() {
   [[ -x "${INSTALL}/bin/rospack" ]] || fail "缺少 ${INSTALL}/bin/rospack，请先成功完成: $0 build"
   [[ -x "${INSTALL}/bin/catkin_find" ]] || fail "缺少 ${INSTALL}/bin/catkin_find，请先成功完成: $0 build"
   [[ -x "${nodelet_bin}" ]] || fail "缺少 ${nodelet_bin}，请先成功完成: $0 build"
-  [[ -f "${plugin}" ]] || fail "缺少 ${plugin}，请先成功完成: $0 build"
+  talker="$(find_app_so talker_nodelet)" \
+    || fail "缺少 libtalker_nodelet.so。请先: ROS_INSTALL=${INSTALL} (cd app/talker_nodelet && ./make.sh x86)"
+  listener="$(find_app_so listener_nodelet)" \
+    || fail "缺少 liblistener_nodelet.so。请先: ROS_INSTALL=${INSTALL} (cd app/listener_nodelet && ./make.sh x86)"
   [[ -d "${DOC}" ]] || fail "缺少 ${DOC}"
 
   echo "==== package → ${RUNTIME} ===="
@@ -749,7 +805,8 @@ cmd_package() {
   copy_bin_script catkin_find
   copy_pkg_bin nodelet nodelet
   copy_pkg_bin rosout rosout
-  cp -a "${plugin}" "${RUNTIME}/lib/"
+  cp -a "${talker}" "${RUNTIME}/lib/libtalker_nodelet.so"
+  cp -a "${listener}" "${RUNTIME}/lib/liblistener_nodelet.so"
 
   # nodelet / 插件 / rosout / rospack 各自 ldd，去重后拷非系统库
   local lib
@@ -758,14 +815,16 @@ cmd_package() {
   done < <(
     {
       collect_nonsystem_libs "${nodelet_bin}"
-      collect_nonsystem_libs "${plugin}"
+      collect_nonsystem_libs "${talker}"
+      collect_nonsystem_libs "${listener}"
       [[ -x "${INSTALL}/lib/rosout/rosout" ]] && collect_nonsystem_libs "${INSTALL}/lib/rosout/rosout"
       [[ -x "${INSTALL}/bin/rospack" ]] && collect_nonsystem_libs "${INSTALL}/bin/rospack"
     } | sort -u
   )
 
   copy_share_pkg nodelet || fail "缺少 share/nodelet"
-  copy_share_pkg my_nodelet_plugin || fail "缺少 share/my_nodelet_plugin"
+  install_app_share talker_nodelet
+  install_app_share listener_nodelet
   copy_share_pkg rosout || true
   copy_share_pkg ros || true
   copy_share_pkg roslaunch || true

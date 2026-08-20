@@ -6,6 +6,8 @@
 
 ```bash
 ./official_full.sh build
+ROS_INSTALL=$PWD/official_full_install (cd app/talker_nodelet && ./make.sh x86)
+ROS_INSTALL=$PWD/official_full_install (cd app/listener_nodelet && ./make.sh x86)
 ./official_full.sh package
 ./official_full.sh run
 ```
@@ -23,7 +25,7 @@
 | `.catkin` | 空标记文件，让 `CMAKE_PREFIX_PATH` 被当成 catkin 工作空间 |
 | `run.sh` | 启动 roscore → manager → load Talker / Listener |
 
-下面「来源」是上游仓库；「本仓库」是对应的 `src/` 目录。均由 `./official_full.sh build` 编进 `official_full_install/`，再由 `package` 拷到这里。
+下面「来源」是上游仓库；「本仓库」是对应的 `src/` 目录。ROS 由 `./official_full.sh build` 编进 `official_full_install/`；Talker/Listener 由 `app/*/make.sh` 编译，再由 `package` 一并拷到这里。
 
 ## `bin/`
 
@@ -50,7 +52,8 @@
 
 | 文件 | 作用 | 来源 | 本仓库 |
 |------|------|------|--------|
-| `libmy_nodelet_plugin.so` | Talker / Listener Nodelet | 本仓库编写 | `src/my_nodelet_plugin` |
+| `libtalker_nodelet.so` | Talker（发送）Nodelet | 本仓库编写 | `app/talker_nodelet` |
+| `liblistener_nodelet.so` | Listener（接收）Nodelet | 本仓库编写 | `app/listener_nodelet` |
 | `libnodeletlib.so` | Nodelet 基类与进程内加载 | [ros/nodelet_core](https://github.com/ros/nodelet_core) | `src/nodelet_core` |
 | `libclass_loader.so` | 按路径加载 `.so` 里的 C++ 类 | [ros/class_loader](https://github.com/ros/class_loader) | `src/class_loader` |
 | `libbondcpp.so` | Nodelet 与 loader 之间的心跳 | [ros/bond_core](https://github.com/ros/bond_core) | `src/bond_core` |
@@ -78,7 +81,8 @@
 
 | 目录 | 作用 | 来源 | 本仓库 |
 |------|------|------|--------|
-| `my_nodelet_plugin/` | `package.xml` + `nodelet_plugins.xml`（Talker / Listener 类名） | 本仓库编写 | `src/my_nodelet_plugin` |
+| `talker_nodelet/` | `package.xml` + `nodelet_plugins.xml`（Talker） | 本仓库编写 | `app/talker_nodelet`（独立 CMake） |
+| `listener_nodelet/` | `package.xml` + `nodelet_plugins.xml`（Listener） | 本仓库编写 | `app/listener_nodelet`（独立 CMake） |
 | `nodelet/` | 官方 nodelet 包清单 | [ros/nodelet_core](https://github.com/ros/nodelet_core) | `src/nodelet_core` |
 | `rosout/` / `roslaunch/` | `roscore` 找 `rosout`、读 `roscore.xml` | [ros/ros_comm](https://github.com/ros/ros_comm) | `src/ros_comm` |
 | `ros/` | `roscore.xml` 等 | [ros/ros](https://github.com/ros/ros) | `src/ros` |

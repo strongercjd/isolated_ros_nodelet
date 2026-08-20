@@ -4,7 +4,7 @@ official_full_install/
 official_full_runtime/
 official_full_logs/
 
-# --- 定制最小（custom_mini.sh）---
+# --- 定制最小 ROS 环境（custom_mini.sh）---
 custom_mini_build/
 custom_mini_install/
 custom_mini_runtime/

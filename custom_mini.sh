@@ -2,19 +2,18 @@
 # =============================================================================
 # custom_mini.sh
 # -----------------------------------------------------------------------------
-# 定制最小环境：不依赖 ROS 的 package.xml / nodelet_plugins.xml。
-# 插件列表写在 plugins.json，由 custom_mini_manager 用 class_loader 按 .so 路径加载。
+# 定制最小 ROS 环境（不含应用层）。应用层在 app/，各包用自己的 make.sh。
 #
 # 子命令（无参数 = help）：
-#   ./custom_mini.sh build     编译 → custom_mini_build/ + custom_mini_install/
-#   ./custom_mini.sh package   打包 → custom_mini_runtime/（README/run/json 为软链接）
-#   ./custom_mini.sh run       执行 custom_mini_runtime/run.sh
+#   ./custom_mini.sh build     编译 ROS 栈 → custom_mini_build/ + custom_mini_install/
+#   ./custom_mini.sh package   打包 → custom_mini_runtime/（README/run/env 为软链接）
+#   ./custom_mini.sh run       打开 ROS 运行环境（交互式 shell）
 #   ./custom_mini.sh clean     删除编译中间文件 custom_mini_build/
 #   ./custom_mini.sh help      参数说明
 #
-# 独立：自己编一整套 ROS 栈 + 插件 + manager，全部装进 custom_mini_install/。
+# 独立：自己编一整套 ROS 栈到 custom_mini_install/。
 # 不读取 official_full_install/（即使对方已编过也会再编进本目录）。
-# 日志：custom_mini_logs/build.log 以及 01_python.log … 12_manager_install.log
+# 日志：custom_mini_logs/build.log 以及 01_python.log … 09_tree.log
 # =============================================================================
 set -euo pipefail
 
@@ -25,18 +24,14 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SRC="${ROOT}/src"
 INSTALL="${ROOT}/custom_mini_install"
-DOC="${ROOT}/doc/custom_mini"                 # runtime 里 README / run.sh / plugins.json 的源
+DOC="${ROOT}/doc/custom_mini"                 # runtime 里 README / run.sh / env.sh 的源
 RUNTIME="${ROOT}/custom_mini_runtime"
 LOG_DIR="${ROOT}/custom_mini_logs"
 BUILD_DIR="${ROOT}/custom_mini_build"
 BUILD_TP="${BUILD_DIR}/third_party"             # Boost / Poco 等非 catkin 的中间文件
 BUILD_ISOLATED="${BUILD_DIR}/isolated"          # catkin_make_isolated 的 --build-space
 DEVEL_ISOLATED="${BUILD_DIR}/devel"             # catkin_make_isolated 的 --devel-space
-BUILD_MGR="${BUILD_DIR}/manager"                # custom_mini_manager 的 cmake 中间文件
 PY_COMPAT="${ROOT}/python_compat"
-JSON_DIR="${SRC}/nlohmann_json/include/nlohmann"
-JSON_HPP="${JSON_DIR}/json.hpp"
-JSON_URL="https://raw.githubusercontent.com/nlohmann/json/v3.11.3/single_include/nlohmann/json.hpp"
 # pip --target 写死 3.12：当前按 Ubuntu 24.04 验证。换发行版要改这一处。
 PY_SITE="${INSTALL}/lib/python3.12/site-packages"
 JOBS="$(nproc 2>/dev/null || echo 4)"
@@ -50,18 +45,19 @@ cmd_help() {
   cat <<EOF
 用法: $0 <build|package|run|clean|help>
 
-  build     独立编译隔离 ROS 栈 + my_nodelet_plugin + custom_mini_manager
+  build     独立编译隔离 ROS 栈（不含 app/ 应用层）
             中间文件: ${BUILD_DIR}
             安装目录: ${INSTALL}
             日志: ${LOG_DIR}
             不使用 official_full_install/
 
-  package   从 ${INSTALL} 抽出可拷贝的运行目录 ${RUNTIME}
-            README.md / run.sh / plugins.json 指向 ${DOC}
+  package   从 ${INSTALL} 抽出可拷贝的 ROS 运行目录 ${RUNTIME}
+            README.md / run.sh / env.sh 指向 ${DOC}
             前提: 已执行 build
 
-  run       执行 ${RUNTIME}/run.sh
+  run       执行 ${RUNTIME}/run.sh（打开已注入环境的交互式 shell）
             前提: 已执行 package
+            应用层 demo 请用 app/*/make.sh 后执行 app_runtime/run.sh
 
   clean     删除编译中间目录 ${BUILD_DIR}
             不删除 ${INSTALL} 和 ${RUNTIME}
@@ -501,10 +497,10 @@ fetch_ros() {
 }
 
 # ---------------------------------------------------------------------------
-# 4) catkin 隔离编译：ROS 核心 + my_nodelet_plugin -> install/
+# 4) catkin 隔离编译：ROS 核心 -> install/（不含 app/ 应用层）
 # ---------------------------------------------------------------------------
 # --source "${SRC}"：src/ 下带 package.xml 的目录都会被扫到。
-# custom_mini 没有 package.xml，不会被编进来。
+# 应用层在 app/，不会被本步编进来（各包用自己的 make.sh）。
 # ROSCONSOLE_BACKEND=print：不链 log4cxx，少一个系统依赖。
 # Boost / UUID 全部指到本仓库 install，防止 FindBoost 捡到系统包。
 build_ros() {
@@ -680,7 +676,7 @@ copy_pkg_bin() {
   cp -a "${src}" "${RUNTIME}/lib/${pkg}/"
 }
 
-# runtime 里的 README / run.sh / plugins.json 不复制，只链到 doc/custom_mini/。
+# runtime 里的 README / run.sh / env.sh 不复制，只链到 doc/custom_mini/。
 link_doc() {
   local name="$1"
   local src="${DOC}/${name}"
@@ -688,22 +684,20 @@ link_doc() {
   ln -sfn "../doc/custom_mini/${name}" "${RUNTIME}/${name}"
 }
 
-ensure_nlohmann_json() {
-  if [[ -f "${JSON_HPP}" ]]; then
-    return 0
-  fi
-  echo "下载 nlohmann/json → ${JSON_HPP}"
-  mkdir -p "${JSON_DIR}"
-  curl -fsSL --retry 2 --connect-timeout 10 --max-time 60 -o "${JSON_HPP}" "${JSON_URL}"     || fail "下载 nlohmann/json 失败"
-}
-
 # -----------------------------------------------------------------------------
-# build：ROS 栈九步 + manager 三步
+# build：只编 ROS 栈（应用层见 app/*/make.sh）
 # -----------------------------------------------------------------------------
 cmd_build() {
-  [[ -f "${SRC}/custom_mini/src/custom_mini_manager.cpp" ]] || fail "缺少 src/custom_mini"
+  # 避免误把官方路径留下的插件软链编进本环境
+  for stale in my_nodelet_plugin talker_nodelet listener_nodelet; do
+    if [[ -L "${SRC}/${stale}" ]]; then
+      rm -f "${SRC}/${stale}"
+      log "removed stale symlink ${SRC}/${stale}"
+    fi
+  done
+
   prepare_build_env
-  log "==== custom_mini build（独立前缀，不使用 official_full_install）===="
+  log "==== custom_mini build（仅 ROS 环境，不使用 official_full_install）===="
   log "ROOT=${ROOT}  JOBS=${JOBS}"
   log "isolation: install prefix=${INSTALL}"
 
@@ -718,42 +712,28 @@ cmd_build() {
   run_logged 09_tree write_final_tree
 
   [[ -f "${INSTALL}/lib/libnodeletlib.so" ]] || fail "缺少 libnodeletlib.so"
-  [[ -f "${INSTALL}/lib/libmy_nodelet_plugin.so" ]] || fail "缺少 libmy_nodelet_plugin.so"
+  [[ -f "${INSTALL}/lib/libroscpp.so" ]] || fail "缺少 libroscpp.so"
   [[ -x "${INSTALL}/bin/rosmaster" ]] || fail "缺少 bin/rosmaster"
 
-  ensure_nlohmann_json
-  log "==== custom_mini_manager ===="
-  mkdir -p "${BUILD_MGR}"
-  run_logged 10_manager_cmake cmake -S "${SRC}/custom_mini" -B "${BUILD_MGR}" \
-    -DCMAKE_BUILD_TYPE=Release \
-    -DCMAKE_PREFIX_PATH="${INSTALL}" \
-    -DCMAKE_INSTALL_PREFIX="${INSTALL}" \
-    -DCMAKE_INSTALL_RPATH="\$ORIGIN/../lib" \
-    -DCMAKE_BUILD_WITH_INSTALL_RPATH=ON \
-    -DCMAKE_CXX_STANDARD=14
-  run_logged 11_manager_build cmake --build "${BUILD_MGR}" -- -j "${JOBS}"
-  run_logged 12_manager_install cmake --install "${BUILD_MGR}"
-
-  [[ -x "${INSTALL}/bin/custom_mini_manager" ]] || fail "安装失败：没有 ${INSTALL}/bin/custom_mini_manager"
   log "==== BUILD SUCCESS ===="
   log "Install tree: ${INSTALL}"
-  log "下一步: $0 package"
+  log "下一步: $0 package   （应用层: app/*/make.sh）"
 }
 
 # -----------------------------------------------------------------------------
-# package：抽出可拷走的 custom_mini_runtime/
+# package：抽出可拷走的 ROS 运行目录 custom_mini_runtime/
 # -----------------------------------------------------------------------------
 # 内容：
-#   bin/   manager + rosmaster（shebang 改成 /usr/bin/env python3）
-#   lib/   插件 .so + ldd 扫到的非系统库
+#   bin/   rosmaster（shebang 改成 /usr/bin/env python3）
+#   lib/   按关键 ROS 库 ldd 扫到的非系统库
 #   python/  rosmaster 需要的模块 + python_compat
-#   软链接  README.md / run.sh / plugins.json → doc/custom_mini/
-# 没有 share/：manager 不走 pluginlib / rospack。
+#   软链接  README.md / run.sh / env.sh → doc/custom_mini/
 cmd_package() {
-  local manager="${INSTALL}/bin/custom_mini_manager"
-  local plugin="${INSTALL}/lib/libmy_nodelet_plugin.so"
-  [[ -x "${manager}" ]] || fail "缺少 ${manager}，请先: $0 build"
-  [[ -f "${plugin}" ]] || fail "缺少 ${plugin}，请先: $0 build"
+  local nodeletlib="${INSTALL}/lib/libnodeletlib.so"
+  local roscpplib="${INSTALL}/lib/libroscpp.so"
+  local classloader="${INSTALL}/lib/libclass_loader.so"
+  [[ -f "${nodeletlib}" ]] || fail "缺少 ${nodeletlib}，请先: $0 build"
+  [[ -f "${roscpplib}" ]] || fail "缺少 ${roscpplib}，请先: $0 build"
   [[ -x "${INSTALL}/bin/rosmaster" ]] || fail "缺少 ${INSTALL}/bin/rosmaster，请先: $0 build"
   [[ -d "${DOC}" ]] || fail "缺少 ${DOC}"
 
@@ -761,16 +741,15 @@ cmd_package() {
   rm -rf "${RUNTIME}"
   mkdir -p "${RUNTIME}/bin" "${RUNTIME}/lib" "${RUNTIME}/python"
 
-  cp -a "${manager}" "${RUNTIME}/bin/custom_mini_manager"
-  cp -a "${plugin}" "${RUNTIME}/lib/"
-
   local lib
   while read -r lib; do
     copy_lib "${lib}" "${RUNTIME}/lib"
   done < <(
     {
-      collect_nonsystem_libs "${manager}"
-      collect_nonsystem_libs "${plugin}"
+      collect_nonsystem_libs "${nodeletlib}"
+      collect_nonsystem_libs "${roscpplib}"
+      collect_nonsystem_libs "${classloader}"
+      printf '%s\n' "${nodeletlib}" "${roscpplib}" "${classloader}"
     } | sort -u
   )
 
@@ -789,15 +768,15 @@ cmd_package() {
 
   link_doc README.md
   link_doc run.sh
-  link_doc plugins.json
+  link_doc env.sh
   chmod +x "${DOC}/run.sh"
 
   echo "==== PACKAGE SUCCESS ===="
   echo "runtime: ${RUNTIME}"
-  echo "下一步: $0 run"
+  echo "下一步: $0 run   （应用层: app/*/make.sh x86 && install，再 app_runtime/run.sh）"
 }
 
-# exec：用 run.sh 替换当前进程，Ctrl+C 由 run.sh 自己处理。
+# exec：用 run.sh 替换当前进程（进入交互式 ROS 环境 shell）。
 cmd_run() {
   [[ -e "${RUNTIME}/run.sh" ]] || fail "未找到 ${RUNTIME}/run.sh，请先: $0 package"
   exec "${RUNTIME}/run.sh"

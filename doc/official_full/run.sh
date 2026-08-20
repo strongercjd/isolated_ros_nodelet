@@ -103,12 +103,12 @@ if ! wait_for_node "/nodelet_manager"; then
 fi
 echo "nodelet manager 已就绪。"
 
-# load 的类名来自 share/my_nodelet_plugin/nodelet_plugins.xml
+# load 的类名来自各包 share/*/nodelet_plugins.xml
 # 两个 load 都挂到同一个 manager，Talker / Listener 在同一进程里通信
-"${HERE}/bin/rosrun" nodelet nodelet load my_nodelet_plugin/TalkerNodelet nodelet_manager __name:=talker &
+"${HERE}/bin/rosrun" nodelet nodelet load talker_nodelet/TalkerNodelet nodelet_manager __name:=talker &
 PIDS+=($!)
 sleep 1
-"${HERE}/bin/rosrun" nodelet nodelet load my_nodelet_plugin/ListenerNodelet nodelet_manager __name:=listener &
+"${HERE}/bin/rosrun" nodelet nodelet load listener_nodelet/ListenerNodelet nodelet_manager __name:=listener &
 PIDS+=($!)
 
 echo "Demo 已在前台运行。应周期性看到 Publishing / Received 日志。"

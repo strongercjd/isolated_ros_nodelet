@@ -2,7 +2,7 @@
  * 用 JSON 描述要加载的 Nodelet，经 class_loader 按 .so 路径直接实例化。
  * 不走 pluginlib / rospack / package.xml / nodelet_plugins.xml。
  *
- * 用法: custom_mini_manager <plugins.json>
+ * 用法: custom_ros_nodelet_manager <plugins.json>
  */
 #include <class_loader/class_loader.h>
 #include <nodelet/loader.h>
@@ -93,7 +93,7 @@ public:
       throw std::runtime_error("unsupported plugins.json version");
     }
 
-    node_name_ = root.value("node", std::string("custom_mini_manager"));
+    node_name_ = root.value("node", std::string("custom_ros_nodelet_manager"));
     const std::string json_dir = dirnameOf(json_path);
     std::string library_dir = "lib";
     if (root.contains("defaults") && root["defaults"].is_object())

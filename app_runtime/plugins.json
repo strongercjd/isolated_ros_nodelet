@@ -1,22 +1,22 @@
 {
   "version": 1,
-  "node": "custom_mini_manager",
+  "node": "custom_ros_nodelet_manager",
   "defaults": {
     "library_dir": "lib"
   },
   "plugins": [
     {
       "name": "/talker",
-      "class": "my_nodelet_plugin::TalkerNodelet",
-      "library": "libmy_nodelet_plugin.so",
+      "class": "talker_nodelet::TalkerNodelet",
+      "library": "libtalker_nodelet.so",
       "enabled": true,
       "remap": {},
       "args": []
     },
     {
       "name": "/listener",
-      "class": "my_nodelet_plugin::ListenerNodelet",
-      "library": "libmy_nodelet_plugin.so",
+      "class": "listener_nodelet::ListenerNodelet",
+      "library": "liblistener_nodelet.so",
       "enabled": true,
       "remap": {},
       "args": []

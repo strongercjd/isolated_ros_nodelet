@@ -2,29 +2,28 @@
 
 在 Ubuntu PC 上从源码编出一套**完全隔离**的 ROS Noetic + Nodelet 环境：不写 `/opt/ros`、不装系统 `ros-*` / `libboost-*-dev`，产物都在仓库目录里。
 
-两条可运行路径：
+三条路径：
 
-| | 官方全量 | 定制最小 |
-|--|----------|----------|
-| 脚本 | `official_full.sh` | `custom_mini.sh` |
-| 启动方式 | `roscore` + `rosrun nodelet` | `rosmaster` + `custom_mini_manager` + `plugins.json` |
-| 是否需要 `package.xml` / `nodelet_plugins.xml` | 需要 | 不需要 |
-| 运行目录 | `official_full_runtime/` | `custom_mini_runtime/` |
+| | 官方全量 | 定制最小 ROS 环境 | 应用层 |
+|--|----------|-------------------|--------|
+| 脚本 | `official_full.sh` | `custom_mini.sh` | `app/*/make.sh` |
+| 作用 | 官方 `roscore` + `rosrun nodelet` demo | 只编 / 打开隔离 ROS 环境 | Talker/Listener（依赖 custom_mini） |
+| 运行目录 | `official_full_runtime/` | `custom_mini_runtime/`（交互 shell） | `app_runtime/` |
 
 目标：在 PC 上验证 Talker / Listener 进程内通信；源码可拷到 ARM Linux（如 RV1126）后重新编译。本仓库不提供交叉工具链。
 
-`src/` 里大部分目录由 `official_full.sh build` 从网上拉取，**为方便也纳入 git**。某包有问题可删掉对应目录再跑 `build`，脚本会补下缺失源码。
+`src/` 里大部分目录由 build 脚本从网上拉取，**为方便也纳入 git**。某包有问题可删掉对应目录再跑 `build`，脚本会补下缺失源码。应用层源码在 `app/`。
 
 ## 特性
 
-- 隔离前缀：官方全量进 `official_full_install/`；定制最小（ROS 栈 + manager）进 `custom_mini_install/`，互不依赖
-- 官方 demo 与最小 demo 各有独立的 `build` / `package` / `run` / `clean`
-- `package` 抽出可拷走的 runtime（`bin/` `lib/` `python/`，官方路径另有 `share/`），不依赖整棵 install
+- 隔离前缀：官方全量进 `official_full_install/`；定制最小 ROS 进 `custom_mini_install/`；应用层产物进 `app_runtime/`
+- `custom_mini.sh` 只负责 ROS 栈；应用逻辑由 `app/*/make.sh` 编译并安装到 `app_runtime/`
+- `package` 抽出可拷走的 runtime，不依赖整棵 install
 - Python 3.12 兼容层（`python_compat/`），无需系统 ROS
 
 ## 系统要求
 
-脚本允许的系统工具：`g++`、`cmake`、`make`、`python3`、`curl`、`tar`（可选 `git`）。当前按 **Ubuntu 24.04 / Python 3.12 / x86_64** 验证。`official_full.sh` 里 pip 目标目录写死为 `lib/python3.12/site-packages`；换发行版需改这一处。
+脚本允许的系统工具：`g++`、`cmake`、`make`、`python3`、`curl`、`tar`（可选 `git`）。当前按 **Ubuntu 24.04 / Python 3.12 / x86_64** 验证。`official_full.sh` / `custom_mini.sh` 里 pip 目标目录写死为 `lib/python3.12/site-packages`；换发行版需改这一处。
 
 - `build-essential`（`g++`、`make`）、`cmake` ≥ 3.0、`python3`、`curl`、`tar`
 - 磁盘建议 8GB+，内存建议 4GB+（8GB 更从容）
@@ -35,20 +34,27 @@
 ## 快速开始
 
 ```bash
-chmod +x official_full.sh custom_mini.sh
+chmod +x official_full.sh custom_mini.sh app/*/make.sh
 
-# 官方全量（首次约 15–30 分钟）
+# 官方全量（首次约 15–30 分钟；脚本不编 app/）
 ./official_full.sh build
+ROS_INSTALL=$PWD/official_full_install (cd app/talker_nodelet && ./make.sh x86)
+ROS_INSTALL=$PWD/official_full_install (cd app/listener_nodelet && ./make.sh x86)
 ./official_full.sh package
 ./official_full.sh run
 
-# 定制最小（独立，不必先编 official_full；首次同样约 15–30 分钟）
+# 定制最小：先编 ROS 环境，再编 / 安装应用层
 ./custom_mini.sh build
 ./custom_mini.sh package
-./custom_mini.sh run
+./custom_mini.sh run          # 打开 ROS 环境交互 shell（不是 demo）
+
+(cd app/talker_nodelet && ./make.sh x86 && ./make.sh install)
+(cd app/listener_nodelet && ./make.sh x86 && ./make.sh install)
+(cd app/custom_ros_nodelet && ./make.sh x86 && ./make.sh install)
+./app_runtime/run.sh          # Talker / Listener demo
 ```
 
-成功时终端周期性出现：
+`./app_runtime/run.sh` 成功时终端周期性出现：
 
 ```text
 [INFO] [...] Publishing: Hello from Nodelet 0
@@ -57,38 +63,34 @@ chmod +x official_full.sh custom_mini.sh
 
 Ctrl+C 结束。日志分别在 `official_full_logs/`、`custom_mini_logs/`。
 
-两个 runtime 里各文件的来源见：
+runtime 说明见：
 
 - [doc/official_full/README.md](doc/official_full/README.md)
 - [doc/custom_mini/README.md](doc/custom_mini/README.md)
+- [doc/app/README.md](doc/app/README.md)
 
 ## 仓库结构
 
 ```text
 isolated_ros_nodelet/
 ├── official_full.sh         # 官方全量：build / package / run / clean / help
-├── custom_mini.sh           # 定制最小：同样五个子命令（独立完整编译）
+├── custom_mini.sh           # 定制最小 ROS 环境（不含应用层）
+├── app/                     # 应用层源码
+│   ├── custom_ros_nodelet/  # JSON 驱动的 manager（include/nlohmann/json.hpp；./make.sh）
+│   ├── talker_nodelet/      # 发送端软件包（./make.sh x86|install）
+│   └── listener_nodelet/    # 接收端软件包（./make.sh x86|install）
 ├── doc/
-│   ├── official_full/       # 官方 runtime 的 README.md / run.sh（runtime 里是软链接）
-│   └── custom_mini/         # 最小 runtime 的 README.md / run.sh / plugins.json
-├── python_compat/           # 本仓库：Python 3.12 兼容层
-├── src/
-│   ├── my_nodelet_plugin/   # 本仓库：Talker / Listener
-│   ├── custom_mini/         # 本仓库：JSON 驱动的 manager
-│   ├── libuuid/             # 本仓库：最小 libuuid
-│   ├── nlohmann_json/       # custom_mini 用的单头文件（build 时下载）
-│   └── …                   # 下载的 Boost / ROS / 第三方（见下表）
-├── official_full_install/   # 官方全量安装产物（不入库）
-├── official_full_build/     # 官方全量中间文件（不入库）
-├── official_full_runtime/   # 官方全量可拷贝运行目录（不入库）
-├── official_full_logs/      # 官方全量编译日志（不入库）
-├── custom_mini_install/     # 定制最小安装产物（不入库）
-├── custom_mini_build/       # 定制最小中间文件（不入库）
-├── custom_mini_runtime/     # 定制最小可拷贝运行目录（不入库）
-└── custom_mini_logs/        # 定制最小编译日志（不入库）
+│   ├── official_full/
+│   ├── custom_mini/         # env.sh / run.sh（打开 ROS shell）
+│   └── app/                 # run.sh / plugins.json
+├── python_compat/
+├── src/                     # ROS / 第三方源码（libuuid 等）
+├── official_full_{install,build,runtime,logs}/
+├── custom_mini_{install,build,runtime,logs}/
+└── app_runtime/             # 应用产物（各 make.sh install）
 ```
 
-五个子命令两边相同：`build` 编译，`package` 抽 runtime，`run` 跑 demo，`clean` 只删 `*_build/`（保留 install、runtime、logs），无参数 = `help`。两条路径可任选其一，互不要求对方先编过。
+`custom_mini.sh run` 打开已注入环境的交互式 bash；应用 demo 用 `./app_runtime/run.sh`。`official_full.sh` / `custom_mini.sh` 都**不编** `app/`；插件由各包 `make.sh` 自行编译。
 
 ## official_full.sh build 做什么
 
@@ -98,8 +100,15 @@ isolated_ros_nodelet/
 2. **Python 依赖**：`get-pip.py` 把 pip 装进 install，再装 `catkin_pkg`、`empy==3.3.4`、`PyYAML`、`rospkg` 等。不写系统 `site-packages`。
 3. **第三方库**：Boost、tinyxml2、console_bridge、Poco、本仓库 `libuuid`，全部编进 install。
 4. **ROS 源码**：从 GitHub 拉（优先 `noetic-devel`）。
-5. **`catkin_make_isolated --install`**：编 ROS 核心与 `my_nodelet_plugin`。关测试，`ROSCONSOLE_BACKEND=print`。
+5. **`catkin_make_isolated --install`**：只编 ROS 核心。关测试，`ROSCONSOLE_BACKEND=print`。
 6. **日志**：`official_full_logs/build.log` 与分步 `01_python.log` … `09_tree.log`。
+
+应用层另做：
+```bash
+ROS_INSTALL=$PWD/official_full_install (cd app/talker_nodelet && ./make.sh x86)
+ROS_INSTALL=$PWD/official_full_install (cd app/listener_nodelet && ./make.sh x86)
+./official_full.sh package
+```
 
 可重复执行：已装好的 Boost / 第三方会跳过。
 
@@ -109,7 +118,7 @@ isolated_ros_nodelet/
 
 1. 启动 `roscore`，等到 `/rosout`
 2. `rosrun nodelet nodelet manager`
-3. load `my_nodelet_plugin/TalkerNodelet` 与 `ListenerNodelet`
+3. load `talker_nodelet/TalkerNodelet` 与 `listener_nodelet/ListenerNodelet`
 
 Talker 每秒在 `chatter` 发 `std_msgs/String`；Listener 订阅并打印。两边日志交替即表示进程内通信正常。
 
@@ -117,7 +126,8 @@ Talker 每秒在 `chatter` 发 `std_msgs/String`；Listener 订阅并打印。�
 
 ```bash
 ls /opt/ros || echo "no /opt/ros"
-ldd official_full_install/lib/libmy_nodelet_plugin.so
+ldd official_full_install/lib/libtalker_nodelet.so
+ldd official_full_install/lib/liblistener_nodelet.so
 ```
 
 `libboost_*`、`libconsole_bridge`、`libPocoFoundation`、`libtinyxml2`、ROS 库应来自本仓库 `official_full_install/lib`。`libc` / `libstdc++` 等是系统 C/C++ 运行时，属预期。
@@ -129,26 +139,29 @@ ldd official_full_install/lib/libmy_nodelet_plugin.so
 | 路径 | 作用 |
 |------|------|
 | `official_full.sh` | 官方全量：`build` → install，`package` → runtime |
-| `custom_mini.sh` | 定制最小：独立完整 `build` → `custom_mini_install/`，`package` → runtime |
+| `custom_mini.sh` | 定制最小 ROS 环境：`build` → `custom_mini_install/`，`run` → 交互 shell |
+| `app/custom_ros_nodelet/make.sh` | manager：`x86` 编译，`install` → `app_runtime/bin/` |
+| `app/talker_nodelet/make.sh` | 发送端：`x86` 编译，`install` → `app_runtime/lib/` |
+| `app/listener_nodelet/make.sh` | 接收端：`x86` 编译，`install` → `app_runtime/lib/` |
 | `doc/official_full/` | 官方 runtime 的 `run.sh` / README |
-| `doc/custom_mini/` | 最小 runtime 的 `run.sh` / `plugins.json` / README |
+| `doc/custom_mini/` | ROS 环境 runtime 的 `env.sh` / `run.sh` / README |
+| `doc/app/` | 应用 runtime 的 `run.sh` / `plugins.json` / README |
 | `python_compat/sitecustomize.py` | 补回 `collections.Mapping`、`inspect.getargspec`，并 `import setuptools` 恢复 `distutils` |
 | `python_compat/imp.py` | 给仍 `import imp` 的 ROS 脚本提供 `load_source` |
 | `src/libuuid/` | 兼容 `uuid/uuid.h` 的小型共享库，避免系统 `uuid-dev` |
-| `src/my_nodelet_plugin/` | 演示用 Nodelet 插件 |
-| `src/custom_mini/` | JSON 驱动的 manager（无 `package.xml`，catkin 扫不到） |
+| `app/talker_nodelet/` | 发送端 Nodelet（独立 CMake，编译不依赖 `package.xml`） |
+| `app/listener_nodelet/` | 接收端 Nodelet（同上） |
+| `app/custom_ros_nodelet/` | JSON 驱动的 manager（无 catkin） |
 
-### `src/my_nodelet_plugin`
+### `app/talker_nodelet` / `app/listener_nodelet`
 
 | 文件 | 作用 |
 |------|------|
-| `package.xml` | catkin 清单；`<export><nodelet plugin=.../></export>` 供官方 manager 找插件 |
-| `CMakeLists.txt` | 编 `libmy_nodelet_plugin.so`，安装头文件与 `nodelet_plugins.xml` |
-| `nodelet_plugins.xml` | pluginlib 注册：`TalkerNodelet` / `ListenerNodelet` |
-| `include/.../talker_nodelet.h` | Talker：定时器 + Publisher |
-| `include/.../listener_nodelet.h` | Listener：订阅 `chatter` |
-| `src/talker_nodelet.cpp` | 每秒发布 `std_msgs/String`；`PLUGINLIB_EXPORT_CLASS` |
-| `src/listener_nodelet.cpp` | 打印收到的消息 |
+| `CMakeLists.txt` | 独立 CMake（`find_package(roscpp/nodelet/...)`，无 catkin） |
+| `nodelet_plugins.xml` | pluginlib 注册本包类名（官方路径用） |
+| `package.xml` | 可选；仅官方 `nodelet load` 的 share 发现需要，**编译不依赖** |
+| `src/*.cpp` / `include/...` | Talker 或 Listener 实现 |
+| `make.sh` | `x86` / `install` / `clean` → `app_runtime/lib/` |
 
 两个 Nodelet 由同一个 manager `dlopen`，同一进程，话题走进程内传输。
 
@@ -160,15 +173,16 @@ ldd official_full_install/lib/libmy_nodelet_plugin.so
 | `uuid.c` | `/dev/urandom` 生成 UUID v4 |
 | `CMakeLists.txt` | 编 `libuuid.so`，由各脚本装进各自的 `*_install/` |
 
-### `src/custom_mini`
+### `app/custom_ros_nodelet`
 
 | 文件 | 作用 |
 |------|------|
 | `CMakeLists.txt` | 独立 CMake 工程，链接 `custom_mini_install` 里的 roscpp / nodelet / class_loader |
-| `src/custom_mini_manager.cpp` | 读 `plugins.json`，按 `.so` 路径实例化 Nodelet |
+| `src/custom_ros_nodelet_manager.cpp` | 读 `plugins.json`，按 `.so` 路径实例化 Nodelet |
+| `include/nlohmann/json.hpp` | 单头 JSON（本包自带） |
+| `make.sh` | `x86` / `install` / `clean` |
 
-头文件 `nlohmann/json.hpp` 由 `custom_mini.sh build` 下载到 `src/nlohmann_json/`。`custom_mini.sh build` 会**重新**把 ROS 栈编进 `custom_mini_install/`（与 `official_full_install/` 无关），再编 manager。
-
+先 `./custom_mini.sh build`，再对各应用包 `./make.sh x86 && ./make.sh install`。
 ## 网上下载的软件包
 
 缺失时 `official_full.sh build` 自动拉取。无网络可按「建议 clone」预先放到 `src/<目录>`；目录非空则跳过下载。脚本会按 `official_full.sh` 里 `fetch_github` 的分支参数**从左到右尝试**（先 `noetic-devel`，没有再试表中其它分支）。下表 clone 命令写的是通常能成功的那个。
@@ -182,7 +196,6 @@ ldd official_full_install/lib/libmy_nodelet_plugin.so
 | `console_bridge/` | ROS 与底层日志桥 | [ros/console_bridge](https://github.com/ros/console_bridge.git) | `git clone --branch 1.0.2 https://github.com/ros/console_bridge.git src/console_bridge` |
 | `poco/` | class_loader 用 Poco Foundation 做 `dlopen` | [pocoproject/poco](https://github.com/pocoproject/poco.git) | `git clone --branch poco-1.11.8-release https://github.com/pocoproject/poco.git src/poco` |
 | `python_dev/` | 解压 `libpythonX.Y-dev` 的 `Python.h`（本机无对应头文件时） | 非 git：`apt-get download libpython$(python3 -c 'import sys; print("%d.%d"%sys.version_info[:2])')-dev` | 无需 clone |
-| `nlohmann_json/` | `custom_mini_manager` 解析 JSON | [nlohmann/json v3.11.3 单头](https://github.com/nlohmann/json) | `custom_mini.sh build` 自动下载 |
 
 ### ROS / 消息生成
 
@@ -253,4 +266,4 @@ RV1126 一类设备内核需 Linux 4.19+。在目标架构上重新 `./official_
 不能，会破坏隔离。
 
 **如何只重编插件？**  
-环境已指向 `official_full_install/` 时，可在 `official_full_build/isolated/my_nodelet_plugin` 执行 `make install`，或删掉该包 build 目录后重跑 `./official_full.sh build`。
+分别 `cd app/talker_nodelet` / `app/listener_nodelet`（以及需要时的 `custom_ros_nodelet`）后 `./make.sh x86`。对着官方 install 时加 `ROS_INSTALL=$PWD/official_full_install`；定制路径默认用 `custom_mini_install`，再 `./make.sh install` → `app_runtime/`。`official_full.sh` / `custom_mini.sh` 都不会编 `app/`。
