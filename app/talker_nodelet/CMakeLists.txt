@@ -15,6 +15,7 @@ find_package(std_msgs REQUIRED)
 add_library(talker_nodelet SHARED src/talker_nodelet.cpp)
 target_include_directories(talker_nodelet PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/include
+  ${CMAKE_CURRENT_SOURCE_DIR}/../common_include
   ${roscpp_INCLUDE_DIRS}
   ${nodelet_INCLUDE_DIRS}
   ${pluginlib_INCLUDE_DIRS}

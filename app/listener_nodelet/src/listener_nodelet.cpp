@@ -1,7 +1,5 @@
 #include "listener_nodelet.h"
 
-#include <pluginlib/class_list_macros.h>
-
 namespace listener_nodelet
 {
 

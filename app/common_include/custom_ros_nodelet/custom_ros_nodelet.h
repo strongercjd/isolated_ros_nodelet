@@ -1,7 +1,7 @@
 #ifndef CUSTOM_ROS_NODELET_CUSTOM_ROS_NODELET_H
 #define CUSTOM_ROS_NODELET_CUSTOM_ROS_NODELET_H
 
-#include <class_loader/class_loader.h>
+#include <class_loader/class_loader.hpp>
 #include <nodelet/loader.h>
 #include <nodelet/nodelet.h>
 #include <ros/ros.h>
@@ -15,5 +15,7 @@
 #include <map>
 #include <string>
 #include <vector>
+
+#include <pluginlib/class_list_macros.h>
 
 #endif

@@ -1,8 +1,8 @@
 #ifndef TALKER_NODELET_TALKER_NODELET_H
 #define TALKER_NODELET_TALKER_NODELET_H
 
-#include <nodelet/nodelet.h>
-#include <ros/ros.h>
+#include <custom_ros_nodelet/custom_ros_nodelet.h>
+#include <std_msgs/String.h>
 
 namespace talker_nodelet
 {

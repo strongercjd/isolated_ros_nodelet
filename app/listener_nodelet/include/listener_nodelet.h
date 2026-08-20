@@ -1,8 +1,7 @@
 #ifndef LISTENER_NODELET_LISTENER_NODELET_H
 #define LISTENER_NODELET_LISTENER_NODELET_H
 
-#include <nodelet/nodelet.h>
-#include <ros/ros.h>
+#include <custom_ros_nodelet/custom_ros_nodelet.h>
 #include <std_msgs/String.h>
 
 namespace listener_nodelet
