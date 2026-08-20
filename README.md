@@ -17,7 +17,7 @@
 
 ## 特性
 
-- 隔离前缀：官方全量的库、头文件、Python 包装进 `official_full_install/`；`custom_mini_manager` 装进 `custom_mini_install/`
+- 隔离前缀：官方全量进 `official_full_install/`；定制最小（ROS 栈 + manager）进 `custom_mini_install/`，互不依赖
 - 官方 demo 与最小 demo 各有独立的 `build` / `package` / `run` / `clean`
 - `package` 抽出可拷走的 runtime（`bin/` `lib/` `python/`，官方路径另有 `share/`），不依赖整棵 install
 - Python 3.12 兼容层（`python_compat/`），无需系统 ROS
@@ -37,12 +37,12 @@
 ```bash
 chmod +x official_full.sh custom_mini.sh
 
-# 1) 官方全量（首次约 15–30 分钟）
+# 官方全量（首次约 15–30 分钟）
 ./official_full.sh build
 ./official_full.sh package
 ./official_full.sh run
 
-# 2) 定制最小（依赖上一步编好的 official_full_install/）
+# 定制最小（独立，不必先编 official_full；首次同样约 15–30 分钟）
 ./custom_mini.sh build
 ./custom_mini.sh package
 ./custom_mini.sh run
@@ -67,7 +67,7 @@ Ctrl+C 结束。日志分别在 `official_full_logs/`、`custom_mini_logs/`。
 ```text
 isolated_ros_nodelet/
 ├── official_full.sh         # 官方全量：build / package / run / clean / help
-├── custom_mini.sh           # 定制最小：同样五个子命令
+├── custom_mini.sh           # 定制最小：同样五个子命令（独立完整编译）
 ├── doc/
 │   ├── official_full/       # 官方 runtime 的 README.md / run.sh（runtime 里是软链接）
 │   └── custom_mini/         # 最小 runtime 的 README.md / run.sh / plugins.json
@@ -88,7 +88,7 @@ isolated_ros_nodelet/
 └── custom_mini_logs/        # 定制最小编译日志（不入库）
 ```
 
-五个子命令两边相同：`build` 编译，`package` 抽 runtime，`run` 跑 demo，`clean` 只删 `*_build/`（保留 install、runtime、logs），无参数 = `help`。
+五个子命令两边相同：`build` 编译，`package` 抽 runtime，`run` 跑 demo，`clean` 只删 `*_build/`（保留 install、runtime、logs），无参数 = `help`。两条路径可任选其一，互不要求对方先编过。
 
 ## official_full.sh build 做什么
 
@@ -129,7 +129,7 @@ ldd official_full_install/lib/libmy_nodelet_plugin.so
 | 路径 | 作用 |
 |------|------|
 | `official_full.sh` | 官方全量：`build` → install，`package` → runtime |
-| `custom_mini.sh` | 定制最小：`build` → `custom_mini_install/`，`package` → runtime |
+| `custom_mini.sh` | 定制最小：独立完整 `build` → `custom_mini_install/`，`package` → runtime |
 | `doc/official_full/` | 官方 runtime 的 `run.sh` / README |
 | `doc/custom_mini/` | 最小 runtime 的 `run.sh` / `plugins.json` / README |
 | `python_compat/sitecustomize.py` | 补回 `collections.Mapping`、`inspect.getargspec`，并 `import setuptools` 恢复 `distutils` |
@@ -158,16 +158,16 @@ ldd official_full_install/lib/libmy_nodelet_plugin.so
 |------|------|
 | `include/uuid/uuid.h` | 与 util-linux libuuid 相近的 C API |
 | `uuid.c` | `/dev/urandom` 生成 UUID v4 |
-| `CMakeLists.txt` | 编 `libuuid.so` 装到 `official_full_install/` |
+| `CMakeLists.txt` | 编 `libuuid.so`，由各脚本装进各自的 `*_install/` |
 
 ### `src/custom_mini`
 
 | 文件 | 作用 |
 |------|------|
-| `CMakeLists.txt` | 独立 CMake 工程，链接 `official_full_install` 里的 roscpp / nodelet / class_loader |
+| `CMakeLists.txt` | 独立 CMake 工程，链接 `custom_mini_install` 里的 roscpp / nodelet / class_loader |
 | `src/custom_mini_manager.cpp` | 读 `plugins.json`，按 `.so` 路径实例化 Nodelet |
 
-头文件 `nlohmann/json.hpp` 由 `custom_mini.sh build` 下载到 `src/nlohmann_json/`。
+头文件 `nlohmann/json.hpp` 由 `custom_mini.sh build` 下载到 `src/nlohmann_json/`。`custom_mini.sh build` 会**重新**把 ROS 栈编进 `custom_mini_install/`（与 `official_full_install/` 无关），再编 manager。
 
 ## 网上下载的软件包
 

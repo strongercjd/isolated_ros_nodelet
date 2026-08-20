@@ -1,4 +1,5 @@
-# 独立 CMake 工程（无 package.xml），不会被 catkin / official_full.sh 扫到。
+# 独立 CMake 工程（无 package.xml），不会被 catkin 扫到。
+# 由 custom_mini.sh 在编完 custom_mini_install 里的 ROS 栈之后单独编译。
 cmake_minimum_required(VERSION 3.0.2)
 project(custom_mini)
 

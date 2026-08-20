@@ -29,14 +29,14 @@ bin/custom_mini_manager plugins.json
 | `plugins.json` | 要加载的 Nodelet 列表 |
 | `run.sh` | 启动 Master 与 manager |
 
-下面「来源」是上游仓库；「本仓库」是对应的 `src/` 目录。编进 `official_full_install/` 或 `custom_mini_install/` 后，由 `custom_mini.sh package` 拷到这里。
+下面「来源」是上游仓库；「本仓库」是对应的 `src/` 目录。由 `./custom_mini.sh build` 编进 `custom_mini_install/` 后，`package` 拷到这里（不依赖 `official_full_install/`）。
 
 ## `bin/`
 
 | 文件 | 作用 | 来源 | 本仓库 |
 |------|------|------|--------|
 | `custom_mini_manager` | 读 `plugins.json`，`dlopen` 插件并实例化 Talker / Listener | 本仓库编写，`./custom_mini.sh build` → `custom_mini_install/bin/` | `src/custom_mini` |
-| `rosmaster` | ROS Master（话题/服务注册，Python） | [ros/ros_comm](https://github.com/ros/ros_comm)（`clients/rospy` / `tools/rosmaster`），`./official_full.sh build` | `src/ros_comm` |
+| `rosmaster` | ROS Master（话题/服务注册，Python） | [ros/ros_comm](https://github.com/ros/ros_comm)（`clients/rospy` / `tools/rosmaster`），`./custom_mini.sh build` | `src/ros_comm` |
 
 ## `lib/`
 
@@ -52,13 +52,13 @@ bin/custom_mini_manager plugins.json
 | `libroscpp_serialization.so` / `libcpp_common.so` / `librostime.so` | 消息序列化、公共类型、时间 | [ros/roscpp_core](https://github.com/ros/roscpp_core) | `src/roscpp_core` |
 | `libroslib.so` | 包路径等辅助 | [ros/ros](https://github.com/ros/ros) | `src/ros` |
 | `librospack.so` | 按包名查找（roscpp 链接依赖） | [ros/rospack](https://github.com/ros/rospack) | `src/rospack` |
-| `libboost_thread.so.1.71.0` 等 | Boost 1.71（thread / filesystem / chrono / regex / program_options） | [Boost 1.71.0](https://www.boost.org/users/history/version_1_71_0.html)，脚本下 tar 编进 `official_full_install/` | `src/boost` |
+| `libboost_thread.so.1.71.0` 等 | Boost 1.71（thread / filesystem / chrono / regex / program_options） | [Boost 1.71.0](https://www.boost.org/users/history/version_1_71_0.html)，脚本下 tar 编进 `custom_mini_install/` | `src/boost` |
 | `libconsole_bridge.so.1.0` | ROS 与底层日志桥 | [ros/console_bridge](https://github.com/ros/console_bridge) | `src/console_bridge` |
 | `libPocoFoundation.so.88` | `class_loader` 的 `dlopen` 后端 | [pocoproject/poco](https://github.com/pocoproject/poco) | `src/poco` |
 | `libtinyxml2.so.8` | XML 解析（rospack / pluginlib） | [leethomason/tinyxml2](https://github.com/leethomason/tinyxml2) | `src/tinyxml2` |
 | `libuuid.so.1` | UUID（bondcpp） | 本仓库编写 | `src/libuuid` |
 
-除 `custom_mini_manager` 外，上表库均由 `./official_full.sh build` 编进 `official_full_install/lib/`，`package` 按 `ldd` 拷入。`libc` / `libstdc++` 等系统库不打包。
+除 `custom_mini_manager` 外，上表库均由 `./custom_mini.sh build` 编进 `custom_mini_install/lib/`，`package` 按 `ldd` 拷入。`libc` / `libstdc++` 等系统库不打包。
 
 ## `python/`
 
