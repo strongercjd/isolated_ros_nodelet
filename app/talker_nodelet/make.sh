@@ -72,17 +72,8 @@ cmd_x86() {
   echo "下一步: $0 install"
 }
 
-ensure_runtime_docs() {
-  mkdir -p "${RUNTIME}/bin" "${RUNTIME}/lib"
-  ln -sfn "../doc/app/run.sh" "${RUNTIME}/run.sh"
-  ln -sfn "../doc/app/plugins.json" "${RUNTIME}/plugins.json"
-  ln -sfn "../doc/app/README.md" "${RUNTIME}/README.md"
-  chmod +x "${DOC}/run.sh"
-}
-
 cmd_install() {
   local so; so="$(find_so)" || fail "缺少 ${SO_NAME}，请先: $0 x86"
-  ensure_runtime_docs
   rm -f "${RUNTIME}/lib/libmy_talker_nodelet.so"
   cp -a "${so}" "${RUNTIME}/lib/${SO_NAME}"
   echo "INSTALLED: ${RUNTIME}/lib/${SO_NAME}"
