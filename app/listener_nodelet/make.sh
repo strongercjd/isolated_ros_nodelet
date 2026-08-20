@@ -75,6 +75,7 @@ cmd_x86() {
 
 cmd_install() {
   local so; so="$(find_so)" || fail "缺少 ${SO_NAME}，请先: $0 x86"
+  mkdir -p "${RUNTIME}/lib"
   rm -f "${RUNTIME}/lib/libmy_listener_nodelet.so"
   cp -a "${so}" "${RUNTIME}/lib/${SO_NAME}"
   echo "INSTALLED: ${RUNTIME}/lib/${SO_NAME}"

@@ -77,7 +77,7 @@ cmd_install() {
   local hdr_dst="${ROOT}/app/common_include/custom_ros_nodelet"
   [[ -x "${bin}" ]] || fail "缺少 ${bin}，请先: $0 x86"
   [[ -f "${hdr}" ]] || fail "缺少 ${hdr}"
-  mkdir -p "${RUNTIME}/bin" "${hdr_dst}"
+  mkdir -p "${RUNTIME}/bin" "${RUNTIME}/lib" "${hdr_dst}"
   rm -f "${RUNTIME}/bin/custom_mini_manager"
   cp -a "${bin}" "${RUNTIME}/bin/${BIN_NAME}"
   cp -a "${hdr}" "${hdr_dst}/custom_ros_nodelet.h"

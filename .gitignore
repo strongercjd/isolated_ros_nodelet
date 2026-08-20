@@ -15,9 +15,15 @@ custom_mini_logs/
 # --- 应用层编译产物 ---
 app/**/build/
 
+# --- 应用层头文件 ---
+app/common_include/
+
+# --- 应用层运行时 ---
+app_runtime/bin/
+app_runtime/lib/
+
 # --- 运行日志 ---
 .ros_minimal/
-
 
 # --- 杂项 ---
 __pycache__/

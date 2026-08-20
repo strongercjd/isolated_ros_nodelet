@@ -13,7 +13,7 @@ set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -L)"
 ROS_RUNTIME="$(cd "${HERE}/../custom_mini_runtime" && pwd -L)"
 
-if [[ ! -x "${HERE}/bin/custom_ros_nodelet_manager" \
+if [[ ! -x "${HERE}/bin/custom_ros_nodelet" \
    || ! -f "${HERE}/lib/libtalker_nodelet.so" \
    || ! -f "${HERE}/lib/liblistener_nodelet.so" ]]; then
   echo "app_runtime 不完整，请先分别:" >&2
@@ -83,8 +83,8 @@ cleanup() {
 }
 trap cleanup INT TERM EXIT
 
-echo "启动 custom_ros_nodelet_manager ..."
-"${HERE}/bin/custom_ros_nodelet_manager" "${HERE}/plugins.json" &
+echo "启动 custom_ros_nodelet ..."
+"${HERE}/bin/custom_ros_nodelet" "${HERE}/plugins.json" &
 PIDS+=($!)
 
 echo "运行中。应周期性看到 Publishing / Received。Ctrl+C 结束应用（不影响 ROS Master）。"
