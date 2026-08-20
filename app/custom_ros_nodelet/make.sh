@@ -2,7 +2,7 @@
 # =============================================================================
 # app/custom_ros_nodelet/make.sh
 # -----------------------------------------------------------------------------
-# 编译 JSON 驱动的 custom_ros_nodelet_manager。依赖仓库根目录 custom_mini_install/。
+# 编译 JSON 驱动的 custom_ros_nodelet。依赖仓库根目录 custom_mini_install/。
 # nlohmann/json.hpp 使用本包 include/，缺失则编译失败。
 #
 #   ./make.sh x86       编译（中间文件在本目录 build/）
@@ -17,8 +17,7 @@ ROOT="$(cd "${PKG}/../.." && pwd)"
 ROS_INSTALL="${ROOT}/custom_mini_install"
 RUNTIME="${ROOT}/app_runtime"
 BUILD="${PKG}/build"
-DOC="${ROOT}/doc/app"
-BIN_NAME="custom_ros_nodelet_manager"
+BIN_NAME="custom_ros_nodelet"
 JOBS="$(nproc 2>/dev/null || echo 4)"
 PY_SITE="${ROS_INSTALL}/lib/python3.12/site-packages"
 PY_COMPAT="${ROOT}/python_compat"
@@ -71,23 +70,19 @@ cmd_x86() {
   echo "下一步: $0 install"
 }
 
-ensure_runtime_docs() {
-  mkdir -p "${RUNTIME}/bin" "${RUNTIME}/lib"
-  [[ -e "${DOC}/run.sh" ]] || fail "缺少 ${DOC}/run.sh"
-  [[ -e "${DOC}/plugins.json" ]] || fail "缺少 ${DOC}/plugins.json"
-  ln -sfn "../doc/app/run.sh" "${RUNTIME}/run.sh"
-  ln -sfn "../doc/app/plugins.json" "${RUNTIME}/plugins.json"
-  ln -sfn "../doc/app/README.md" "${RUNTIME}/README.md"
-  chmod +x "${DOC}/run.sh"
-}
 
 cmd_install() {
   local bin="${BUILD}/${BIN_NAME}"
+  local hdr="${PKG}/include/custom_ros_nodelet.h"
+  local hdr_dst="${ROOT}/app/common_include/custom_ros_nodelet"
   [[ -x "${bin}" ]] || fail "缺少 ${bin}，请先: $0 x86"
-  ensure_runtime_docs
+  [[ -f "${hdr}" ]] || fail "缺少 ${hdr}"
+  mkdir -p "${RUNTIME}/bin" "${hdr_dst}"
   rm -f "${RUNTIME}/bin/custom_mini_manager"
   cp -a "${bin}" "${RUNTIME}/bin/${BIN_NAME}"
+  cp -a "${hdr}" "${hdr_dst}/custom_ros_nodelet.h"
   echo "INSTALLED: ${RUNTIME}/bin/${BIN_NAME}"
+  echo "INSTALLED: ${hdr_dst}/custom_ros_nodelet.h"
 }
 
 cmd_clean() {

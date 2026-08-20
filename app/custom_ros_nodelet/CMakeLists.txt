@@ -11,19 +11,19 @@ find_package(roscpp REQUIRED)
 find_package(nodelet REQUIRED)
 find_package(class_loader REQUIRED)
 
-add_executable(custom_ros_nodelet_manager src/custom_ros_nodelet_manager.cpp)
-target_include_directories(custom_ros_nodelet_manager PRIVATE
+add_executable(custom_ros_nodelet src/custom_ros_nodelet.cpp)
+target_include_directories(custom_ros_nodelet PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/include
   ${roscpp_INCLUDE_DIRS}
   ${nodelet_INCLUDE_DIRS}
   ${class_loader_INCLUDE_DIRS}
 )
-target_link_libraries(custom_ros_nodelet_manager
+target_link_libraries(custom_ros_nodelet
   ${roscpp_LIBRARIES}
   ${nodelet_LIBRARIES}
   ${class_loader_LIBRARIES}
 )
 
-install(TARGETS custom_ros_nodelet_manager
+install(TARGETS custom_ros_nodelet
   RUNTIME DESTINATION bin
 )

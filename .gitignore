@@ -12,6 +12,9 @@ custom_mini_logs/
 
 .catkin_workspace
 
+# --- 应用层编译产物 ---
+app/**/build/
+
 # --- 运行日志 ---
 .ros_minimal/
 

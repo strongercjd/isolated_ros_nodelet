@@ -4,22 +4,10 @@
  *
  * 用法: custom_ros_nodelet_manager <plugins.json>
  */
-#include <class_loader/class_loader.h>
-#include <nodelet/loader.h>
-#include <nodelet/nodelet.h>
-#include <ros/ros.h>
+
+#include "custom_ros_nodelet.h"
 
 #include <nlohmann/json.hpp>
-
-#include <boost/bind/bind.hpp>
-#include <boost/shared_ptr.hpp>
-
-#include <cstdlib>
-#include <iostream>
-#include <fstream>
-#include <map>
-#include <string>
-#include <vector>
 
 namespace
 {
