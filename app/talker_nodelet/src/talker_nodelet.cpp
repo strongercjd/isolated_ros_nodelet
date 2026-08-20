@@ -1,4 +1,4 @@
-#include "talker_nodelet/talker_nodelet.h"
+#include "talker_nodelet.h"
 
 #include <pluginlib/class_list_macros.h>
 #include <std_msgs/String.h>

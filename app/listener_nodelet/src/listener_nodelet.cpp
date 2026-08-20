@@ -1,4 +1,4 @@
-#include "listener_nodelet/listener_nodelet.h"
+#include "listener_nodelet.h"
 
 #include <pluginlib/class_list_macros.h>
 
