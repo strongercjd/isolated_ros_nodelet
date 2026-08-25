@@ -200,22 +200,21 @@ fetch_github() {
   local br url tmp
   for br in "$@"; do
     tmp="${LOG_DIR}/${repo}-${br}.tar.gz"
-    url="https://github.com/${org}/${repo}/archive/refs/heads/${br}.tar.gz"
-    log "try ${url}"
-    if curl_get "${url}" "${tmp}"; then
-      mkdir -p "${dest}"
-      tar -xzf "${tmp}" -C "${dest}" --strip-components=1
-      log "fetched ${org}/${repo} branch ${br}"
-      return 0
-    fi
-    url="https://github.com/${org}/${repo}/archive/refs/tags/${br}.tar.gz"
-    log "try ${url}"
-    if curl_get "${url}" "${tmp}"; then
-      mkdir -p "${dest}"
-      tar -xzf "${tmp}" -C "${dest}" --strip-components=1
-      log "fetched ${org}/${repo} tag ${br}"
-      return 0
-    fi
+    # codeload.github.com 优先（某些网络下 github.com 连接超时，codeload 可达），再退回 archive 路径。
+    for url in \
+      "https://codeload.github.com/${org}/${repo}/tar.gz/refs/heads/${br}" \
+      "https://codeload.github.com/${org}/${repo}/tar.gz/refs/tags/${br}" \
+      "https://github.com/${org}/${repo}/archive/refs/heads/${br}.tar.gz" \
+      "https://github.com/${org}/${repo}/archive/refs/tags/${br}.tar.gz"
+    do
+      log "try ${url}"
+      if curl_get "${url}" "${tmp}"; then
+        mkdir -p "${dest}"
+        tar -xzf "${tmp}" -C "${dest}" --strip-components=1
+        log "fetched ${org}/${repo} branch/tag ${br}"
+        return 0
+      fi
+    done
   done
   fail "unable to fetch ${org}/${repo} (tried: $*)"
 }
@@ -257,6 +256,9 @@ cmake_build_install() {
   rm -rf "${bdir}"
   mkdir -p "${bdir}"
   (
+    # run_logged 以 set +e 调用本函数，必须在这里 set -e，
+    # 否则 cmake 失败也会继续 touch stamp，下次 build 会错误地 skip。
+    set -e
     cd "${bdir}"
     cmake "${srcdir}" \
       -DCMAKE_INSTALL_PREFIX="${INSTALL}" \
@@ -342,6 +344,28 @@ setup_python() {
     [[ -f "${pylib}" ]] || fail "system libpython${PYVER}.so.1.0 not found"
     ln -sfn "${pylib}" "${INSTALL}/lib/libpython${PYVER}.so"
   fi
+}
+
+# Eigen 纯头文件库（app/slam2d_nodelet 的 ICP SVD 用）。与 python-dev 同套路：
+# 只 download + dpkg-deb -x，不 apt install，避免往系统写开发包。
+setup_eigen() {
+  if [[ -f "${INSTALL}/include/eigen3/Eigen/Core" ]]; then
+    log "skip eigen headers (already at ${INSTALL}/include/eigen3)"
+    return 0
+  fi
+  local debdir="${SRC}/eigen3_dev"
+  mkdir -p "${debdir}"
+  log "extract libeigen3-dev headers into install/"
+  (
+    cd "${debdir}"
+    rm -rf extracted libeigen3-dev_*.deb
+    apt-get download libeigen3-dev
+    dpkg-deb -x libeigen3-dev_*.deb extracted
+  )
+  cp -a "${debdir}/extracted/usr/include/eigen3" "${INSTALL}/include/eigen3"
+  mkdir -p "${INSTALL}/share"
+  cp -a "${debdir}/extracted/usr/share/eigen3/cmake" "${INSTALL}/share/eigen3/cmake" 2>/dev/null || true
+  [[ -f "${INSTALL}/include/eigen3/Eigen/Core" ]] || fail "eigen headers missing after extract"
 }
 
 # ---------------------------------------------------------------------------
@@ -472,6 +496,28 @@ fetch_ros() {
   fetch_github ros class_loader "${SRC}/class_loader" noetic-devel kinetic-devel
   fetch_github ros nodelet_core "${SRC}/nodelet_core" noetic-devel kinetic-devel indigo-devel
   fetch_github ros bond_core "${SRC}/bond_core" noetic-devel kinetic-devel
+  # stage_ros（Stage 仿真）需要的消息 / 几何 / tf 依赖，以及 xacro 工具。
+  fetch_github ros common_msgs "${SRC}/common_msgs" noetic-devel kinetic-devel
+  fetch_github ros geometry "${SRC}/geometry" noetic-devel kinetic-devel
+  fetch_github ros geometry2 "${SRC}/geometry2" noetic-devel kinetic-devel
+  fetch_github ros angles "${SRC}/angles" noetic-devel
+  fetch_github ros actionlib "${SRC}/actionlib" noetic-devel
+  fetch_github ros roslint "${SRC}/roslint" master
+  fetch_github ros xacro "${SRC}/xacro" noetic-devel
+
+  # geometry2 / geometry 里用不到的子包（依赖 Eigen / KDL / Bullet / OpenCV 等系统库）。
+  ignore_package tf2_bullet
+  ignore_package tf2_eigen
+  ignore_package tf2_geometry_msgs
+  ignore_package tf2_kdl
+  ignore_package tf2_sensor_msgs
+  ignore_package tf2_tools
+  ignore_package test_tf2
+  ignore_package geometry2
+  ignore_package eigen_conversions
+  ignore_package kdl_conversions
+  ignore_package tf_conversions
+  ignore_package geometry
 
   # Packages not needed for the Talker/Listener demo (extra deps: lz4, bzip2, ...).
   ignore_package rosbag
@@ -702,6 +748,7 @@ cmd_build() {
   log "isolation: install prefix=${INSTALL}"
 
   run_logged 01_python setup_python
+  run_logged 01b_eigen setup_eigen
   run_logged 02_uuid build_uuid
   run_logged 03_boost build_boost
   run_logged 04_tinyxml2 build_tinyxml2

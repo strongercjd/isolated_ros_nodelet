@@ -1,0 +1,94 @@
+# =============================================================================
+# box_house.fworld —— flat_sim 示例世界（语义对齐 stage_ros 的 box_house.world：
+# 四室两厅简化户型：外轮廓 + 内墙 + 家具障碍 + 一辆圆形 mycar）
+#
+# 约定：长度米(m)、角度度(deg)；+x 东、+y 北、yaw 逆时针为正、原点在世界中心。
+# 所有 # 备注（整行 / 行尾）在加载时全部丢弃，不进入运行时模型；
+# 删掉全部备注后仿真结果不变。
+#
+# 运行：./tool/flat_sim/run_flat_sim.sh             （GUI）
+#       ./tool/flat_sim/run_flat_sim.sh --headless  （无窗口）
+# =============================================================================
+
+world:
+  name: box_house
+  size: [15, 10]          # 世界宽 x 高（GUI 视图适配用）
+  resolution: 0.02        # 兼容字段（本实现用解析法求交，不参与计算）
+  timestep_ms: 50         # 仿真步长 50ms = 20 Hz
+
+# ---- 外轮廓（四面外墙，厚 0.15m）----
+wall:
+  name: wall_north        # 北墙
+  pose: [0, 5, 0]
+  size: [15, 0.15]
+
+wall:
+  name: wall_south        # 南墙（玄关入口在南侧）
+  pose: [0, -5, 0]
+  size: [15, 0.15]
+
+wall:
+  name: wall_west         # 西墙（沿 y 方向：yaw 转 90°）
+  pose: [-7.5, 0, 90]
+  size: [10, 0.15]
+
+wall:
+  name: wall_east         # 东墙
+  pose: [7.5, 0, 90]
+  size: [10, 0.15]
+
+# ---- 内墙（简化隔断；真实户型墙面更多，此处取代表性的几面）----
+wall:
+  name: wall_master_bed   # 主卧东隔墙：x=-2.5，南半区
+  pose: [-2.5, -2.5, 90]
+  size: [5, 0.15]
+
+wall:
+  name: wall_mid_h        # 中部横墙：西半区 y=0
+  pose: [-5, 0, 0]
+  size: [5, 0.15]
+
+wall:
+  name: wall_kitchen      # 厨房西隔墙：x=3，北半区
+  pose: [3, 2.5, 90]
+  size: [5, 0.15]
+
+wall:
+  name: wall_hall         # 玄关上沿：y=0，东段
+  pose: [5.25, 0, 0]
+  size: [4.5, 0.15]
+
+# ---- 家具 / 障碍 ----
+box:
+  name: obstacle_1        # 斜放 45° 的箱子
+  pose: [2, 1, 45]
+  size: [0.5, 0.5]
+
+box:
+  name: sofa              # 客厅沙发
+  pose: [-4, -3, 0]
+  size: [1.8, 0.6]
+
+circle:
+  name: pillar_1          # 餐厅立柱
+  pose: [-1, 0, 0]
+  radius: 0.3
+
+circle:
+  name: pillar_2          # 北走廊立柱
+  pose: [4.5, 3.5, 0]
+  radius: 0.25
+
+# ---- 机器人（内嵌写法；引用写法见 box_house_ref.fworld）----
+robot:
+  name: mycar             # 话题前缀：/mycar/odom、/mycar/base_scan、/mycar/cmd_vel
+  shape: circle
+  radius: 0.1             # 圆形半径 0.1m
+  pose: [6, -4, 90]       # 世界系初始位姿：玄关入口，朝北（+y）
+  drive: diff             # 差速驱动
+  color: red              # 仅显示用
+  laser:
+    pose: [0, 0, 0]       # 车体中心，与车头同向
+    range: [0.0, 10.0]
+    fov_deg: 360          # 360° 全向激光（angle_min/max = ±180°）
+    samples: 361

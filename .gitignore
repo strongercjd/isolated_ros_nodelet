@@ -35,3 +35,7 @@ __pycache__/
 .DS_Store
 .idea/
 .vscode/
+
+# --- tool 工具编译产物 ---
+tool/*/build/
+tool/*/install/

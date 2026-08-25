@@ -1,0 +1,50 @@
+# =============================================================================
+# box_house_ref.fworld —— 与 box_house.fworld 同一场景（简化版障碍），但机器人
+# 改用 robot_file 引用 models/mycar.frobot（两种写法语义一致，详见 README）。
+# 路径相对本文件所在目录解析（worlds/ → ../models/）。
+# =============================================================================
+#
+# 这是整行备注：下面被临时禁用的内嵌写法，加载时整块丢弃，不影响运行
+# robot:
+#   name: mycar
+#   radius: 0.1
+
+world:
+  name: box_house_ref
+  size: [15, 10]
+  resolution: 0.02
+  timestep_ms: 50
+
+wall:
+  name: wall_north
+  pose: [0, 5, 0]
+  size: [15, 0.15]
+
+wall:
+  name: wall_south
+  pose: [0, -5, 0]
+  size: [15, 0.15]
+
+wall:
+  name: wall_west
+  pose: [-7.5, 0, 90]
+  size: [10, 0.15]
+
+wall:
+  name: wall_east
+  pose: [7.5, 0, 90]
+  size: [10, 0.15]
+
+box:
+  name: obstacle_1
+  pose: [2, 1, 45]
+  size: [0.5, 0.5]
+
+circle:
+  name: pillar_1
+  pose: [-1, 0, 0]
+  radius: 0.3
+
+# 引用外部模型文件；缩进的 pose 覆盖 .frobot 里的缺省初始位姿
+robot_file: "../models/mycar.frobot"
+  pose: [6, -4, 90]       # 世界系初始位姿：玄关入口，朝北
