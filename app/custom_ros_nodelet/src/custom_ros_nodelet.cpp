@@ -9,6 +9,13 @@
 
 #include <nlohmann/json.hpp>
 
+#include <fcntl.h>
+#include <sys/stat.h>
+#include <unistd.h>
+
+#include <cerrno>
+#include <cstring>
+
 namespace
 {
 
@@ -48,6 +55,119 @@ std::string joinPath(const std::string& a, const std::string& b)
   return a + "/" + b;
 }
 
+// 日志配置（plugins.json 顶层 "log" 字段）
+struct LogSpec
+{
+  bool enabled = true;    // false 时保持打印到终端
+  std::string dir = "log";                    // 相对 plugins.json 所在目录
+  std::string file = "custom_ros_nodelet.log";
+  std::string format = "[${severity}] [${time:%m-%d %H:%M:%S}]: ${message}";
+  bool color = false;     // 文件日志默认关 ANSI 颜色
+};
+
+// 递归创建目录（mkdir -p）
+bool makeDirs(const std::string& path)
+{
+  if (path.empty() || path == "." || path == "/")
+  {
+    return true;
+  }
+  std::string acc;
+  std::string::size_type start = 0;
+  if (path[0] == '/')
+  {
+    acc = "/";
+    start = 1;
+  }
+  while (start < path.size())
+  {
+    const std::string::size_type slash = path.find('/', start);
+    const std::string seg = (slash == std::string::npos) ? path.substr(start) : path.substr(start, slash - start);
+    if (!seg.empty())
+    {
+      acc = acc.empty() ? seg : (acc.back() == '/' ? acc + seg : acc + "/" + seg);
+      if (mkdir(acc.c_str(), 0755) != 0 && errno != EEXIST)
+      {
+        return false;
+      }
+    }
+    if (slash == std::string::npos)
+    {
+      break;
+    }
+    start = slash + 1;
+  }
+  return true;
+}
+
+// 日志配置的生效分两代进程完成：
+//   第一代：setenv（ROSCONSOLE_FORMAT=${time:FORMAT} 月日时分秒格式 / NO_COLOR 关色码）
+//           后 execv 自我重启。必须 re-exec 是因为 rosconsole 的 initialize() 在库的
+//   静态初始化阶段（main 之前）就可能已被触发并定格格式/颜色，进程内补设环境变量无效；
+//   重启后新进程从静态初始化起即读到新环境。
+//   第二代（哨兵变量已设）：dup2 stdout/stderr → 日志文件，manager 与全部动态库的
+//   输出（rosconsole 的 fprintf、printf、std::cout）都写入文件。
+void applyLogSpec(const LogSpec& spec, const std::string& json_dir, char** argv)
+{
+  if (!spec.enabled)
+  {
+    return;
+  }
+
+  if (getenv("CUSTOM_ROS_NODELET_LOG_ENV") == NULL)
+  {
+    // 第一代进程：注入环境后重启自身（execv 成功不返回）
+    setenv("CUSTOM_ROS_NODELET_LOG_ENV", "1", 1);
+    setenv("ROSCONSOLE_FORMAT", spec.format.c_str(), 1);
+    if (spec.color)
+    {
+      unsetenv("NO_COLOR");
+    }
+    else
+    {
+      setenv("NO_COLOR", "1", 1);
+    }
+    fprintf(stderr, "apply ROSCONSOLE_FORMAT, re-exec %s ...\n", argv[0]);
+    fflush(stderr);
+    if (execv("/proc/self/exe", argv) == -1)
+    {
+      fprintf(stderr, "re-exec failed (%s), continue with default log format\n",
+              strerror(errno));
+      // 继续做 dup2：至少日志仍写入文件
+    }
+    else
+    {
+      return; // 不可达，保险
+    }
+  }
+
+  std::string dir = isAbsolute(spec.dir) ? spec.dir : joinPath(json_dir, spec.dir);
+  if (!makeDirs(dir))
+  {
+    fprintf(stderr, "cannot create log dir %s: %s (logs stay on terminal)\n",
+            dir.c_str(), strerror(errno));
+    return;
+  }
+  const std::string path = joinPath(dir, spec.file);
+  const int fd = open(path.c_str(), O_WRONLY | O_CREAT | O_APPEND, 0644);
+  if (fd < 0)
+  {
+    fprintf(stderr, "cannot open log file %s: %s (logs stay on terminal)\n",
+            path.c_str(), strerror(errno));
+    return;
+  }
+
+  fprintf(stderr, "==== logs redirect to %s ====\n", path.c_str());
+  fflush(stderr);
+  if (dup2(fd, STDOUT_FILENO) < 0 || dup2(fd, STDERR_FILENO) < 0)
+  {
+    fprintf(stderr, "dup2 failed: %s (logs stay on terminal)\n", strerror(errno));
+    close(fd);
+    return;
+  }
+  close(fd);
+}
+
 struct PluginSpec
 {
   std::string name;
@@ -83,6 +203,16 @@ public:
 
     node_name_ = root.value("node", std::string("custom_ros_nodelet_manager"));
     const std::string json_dir = dirnameOf(json_path);
+    json_dir_ = json_dir;
+    if (root.contains("log") && root["log"].is_object())
+    {
+      const nlohmann::json& j = root["log"];
+      log_spec_.enabled = j.value("enabled", log_spec_.enabled);
+      log_spec_.dir = j.value("dir", log_spec_.dir);
+      log_spec_.file = j.value("file", log_spec_.file);
+      log_spec_.format = j.value("format", log_spec_.format);
+      log_spec_.color = j.value("color", log_spec_.color);
+    }
     std::string library_dir = "lib";
     if (root.contains("defaults") && root["defaults"].is_object())
     {
@@ -137,6 +267,16 @@ public:
     return node_name_;
   }
 
+  const LogSpec& logSpec() const
+  {
+    return log_spec_;
+  }
+
+  const std::string& jsonDir() const
+  {
+    return json_dir_;
+  }
+
   const std::vector<PluginSpec>& specs() const
   {
     return specs_;
@@ -168,6 +308,8 @@ public:
 
 private:
   std::string node_name_;
+  std::string json_dir_;
+  LogSpec log_spec_;
   std::vector<PluginSpec> specs_;
   std::map<std::string, boost::shared_ptr<class_loader::ClassLoader> > loaders_;
 };
@@ -183,6 +325,9 @@ int main(int argc, char** argv)
   }
 
   JsonPluginFactory factory(argv[1]);
+
+  // 日志重定向与格式必须在 ros::init（首次 rosconsole 初始化）之前生效
+  applyLogSpec(factory.logSpec(), factory.jsonDir(), argv);
 
   ros::init(argc, argv, factory.nodeName());
 

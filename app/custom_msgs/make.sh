@@ -57,7 +57,8 @@ cmd_build() {
     python3 "${GEN_CPP}" "${msg}" \
       -p "${PKG_NAME}" \
       -o "${GEN_OUT}" \
-      -e "${TEMPLATE_DIR}"
+      -e "${TEMPLATE_DIR}" \
+      -I "${PKG_NAME}:${MSG_DIR}"
     count=$((count + 1))
   done
   [[ "${count}" -gt 0 ]] || fail "未找到 ${MSG_DIR}/*.msg"

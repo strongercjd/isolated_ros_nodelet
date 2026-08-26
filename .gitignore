@@ -24,6 +24,7 @@ app_runtime/lib/
 
 # --- 运行日志 ---
 .ros_minimal/
+app_runtime/data/log/
 
 # --- 杂项 ---
 __pycache__/

@@ -43,6 +43,7 @@
 #include <boost/regex.hpp>
 #include <boost/make_shared.hpp>
 #include <boost/date_time/posix_time/posix_time.hpp>
+#include <boost/date_time/c_local_time_adjustor.hpp>
 
 #include <cstdarg>
 #include <cstdlib>
@@ -198,7 +199,9 @@ struct TimeToken : public Token
       boost::posix_time::time_facet *facet = new boost::posix_time::time_facet();
       facet->format(format_.c_str());
       ss.imbue(std::locale(std::locale::classic(), facet));
-      ss << ros::WallTime::now().toBoost();
+      // 自定义格式按本地时区输出（toBoost 为 UTC naive ptime，facet 不做时区换算）
+      typedef boost::date_time::c_local_adjustor<boost::posix_time::ptime> local_adj;
+      ss << local_adj::utc_to_local(ros::WallTime::now().toBoost());
     }
 
     if (ros::Time::isValid() && ros::Time::isSimTime())
@@ -237,7 +240,9 @@ struct WallTimeToken : public Token
       boost::posix_time::time_facet* facet = new boost::posix_time::time_facet();
       facet->format(format_.c_str());
       ss.imbue(std::locale(std::locale::classic(), facet));
-      ss << ros::WallTime::now().toBoost();
+      // 自定义格式按本地时区输出（toBoost 为 UTC naive ptime，facet 不做时区换算）
+      typedef boost::date_time::c_local_adjustor<boost::posix_time::ptime> local_adj;
+      ss << local_adj::utc_to_local(ros::WallTime::now().toBoost());
     }
 
     return ss.str();
@@ -273,7 +278,9 @@ struct FileToken : public Token
 {
   virtual std::string getString(void*, ::ros::console::Level, const char*, const char* file, const char*, int)
   {
-    return file;
+    // __FILE__ 可能是编译期的长绝对路径，日志里只保留文件名
+    const char* base = file ? std::strrchr(file, '/') : NULL;
+    return base ? base + 1 : file;
   }
 };
 

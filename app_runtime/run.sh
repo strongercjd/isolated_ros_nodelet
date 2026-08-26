@@ -87,5 +87,7 @@ echo "启动 custom_ros_nodelet ..."
 "${HERE}/bin/custom_ros_nodelet" "${HERE}/plugins.json" &
 PIDS+=($!)
 
-echo "运行中。应周期性看到 Publishing / Received。Ctrl+C 结束应用（不影响 ROS Master）。"
+echo "运行中。manager 与全部 nodelet 的日志写入 ${HERE}/data/log/custom_ros_nodelet.log"
+echo "实时查看: tail -f ${HERE}/data/log/custom_ros_nodelet.log"
+echo "Ctrl+C 结束应用（不影响 ROS Master）。"
 wait

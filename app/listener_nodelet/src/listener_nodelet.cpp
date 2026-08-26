@@ -18,13 +18,13 @@ void ListenerNodelet::onInit()
 
 void ListenerNodelet::callback(const std_msgs::String::ConstPtr& msg)
 {
-  NODELET_INFO("Received String: %s", msg->data.c_str());
+  // NODELET_INFO("Received String: %s", msg->data.c_str());
 }
 
 void ListenerNodelet::customCallback(const custom_msgs::CustomData::ConstPtr& msg)
 {
-  NODELET_INFO("Received CustomData: text=%s seq=%u value=%.2f",
-               msg->text.c_str(), msg->seq, msg->value);
+  // NODELET_INFO("Received CustomData: text=%s seq=%u value=%.2f",
+  //              msg->text.c_str(), msg->seq, msg->value);
 }
 
 }  // namespace listener_nodelet

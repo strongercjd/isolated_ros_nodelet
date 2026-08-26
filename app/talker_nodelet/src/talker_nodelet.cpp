@@ -27,15 +27,15 @@ void TalkerNodelet::timerCallback(const ros::TimerEvent&)
 
   std_msgs::String str_msg;
   str_msg.data = text;
-  NODELET_INFO("Publishing String: %s", str_msg.data.c_str());
+  // NODELET_INFO("Publishing String: %s", str_msg.data.c_str());
   pub_.publish(str_msg);
 
   custom_msgs::CustomData custom_msg;
   custom_msg.text = text;
   custom_msg.seq = static_cast<uint16_t>(count_);
   custom_msg.value = static_cast<float>(count_) * 0.1f;
-  NODELET_INFO("Publishing CustomData: text=%s seq=%u value=%.2f",
-               custom_msg.text.c_str(), custom_msg.seq, custom_msg.value);
+  // NODELET_INFO("Publishing CustomData: text=%s seq=%u value=%.2f",
+  //              custom_msg.text.c_str(), custom_msg.seq, custom_msg.value);
   custom_pub_.publish(custom_msg);
 
   ++count_;

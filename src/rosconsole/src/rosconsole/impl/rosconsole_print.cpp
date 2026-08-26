@@ -31,6 +31,10 @@
 #define ROSCONSOLE_CONSOLE_IMPL_EXPORTS
 #include "ros/console_impl.h"
 
+#include <map>
+#include <string>
+#include <boost/thread/mutex.hpp>
+
 namespace ros
 {
 namespace console
@@ -40,12 +44,20 @@ namespace impl
 
 LogAppender* rosconsole_print_appender = 0;
 
+// logger 名驻留表：handle = 指向驻留字符串的指针（进程生命周期常驻，
+// 每个名字仅一次分配）。使 ${logger} token 能区分同进程内各 nodelet 的日志来源
+namespace
+{
+boost::mutex g_handle_mutex;
+std::map<std::string, const std::string*> g_handles;
+}
+
 void initialize()
 {}
 
 void print(void* handle, ::ros::console::Level level, const char* str, const char* file, const char* function, int line)
 {
-  ::ros::console::backend::print(0, level, str, file, function, line);
+  ::ros::console::backend::print(handle, level, str, file, function, line);
   if(rosconsole_print_appender)
   {
     rosconsole_print_appender->log(level, str, file, function, line);
@@ -59,12 +71,28 @@ bool isEnabledFor(void* handle, ::ros::console::Level level)
 
 void* getHandle(const std::string& name)
 {
-  return 0;
+  boost::mutex::scoped_lock lock(g_handle_mutex);
+  std::map<std::string, const std::string*>::iterator it = g_handles.find(name);
+  if (it != g_handles.end())
+  {
+    return const_cast<void*>(static_cast<const void*>(it->second));
+  }
+  const std::string* held = new std::string(name);
+  g_handles[name] = held;
+  return const_cast<void*>(static_cast<const void*>(held));
 }
 
 std::string getName(void* handle)
 {
-  return "";
+  if (!handle)
+  {
+    return "";
+  }
+  std::string name = *static_cast<const std::string*>(handle);
+  // 去掉 rosconsole 的 logger 前缀链（"ros.xxx_nodelet./node" → "/node"），
+  // 使 ${logger} 标签只显示 nodelet 名；无前缀的名字（如 "ros"）原样返回
+  size_t pos = name.rfind('.');
+  return pos == std::string::npos ? name : name.substr(pos + 1);
 }
 
 void register_appender(LogAppender* appender)
