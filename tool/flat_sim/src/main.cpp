@@ -155,7 +155,7 @@ int main(int argc, char** argv) {
               headless ? "headless" : "GUI");
   for (const flat_sim::Simulator::RobotState& r : sim.robots()) {
     std::printf("[flat_sim] 机器人 %s：circle r=%.2fm，激光 %zu 个；"
-                "/%s/odom、/%s/base_scan、/%s/cmd_vel\n",
+                "/%s/odom、/%s/base_scan、/%s/cmd_vel；另订阅 /heartbeat（500ms 看门狗）\n",
                 r.name.c_str(), r.radius, r.scans.size(), r.name.c_str(), r.name.c_str(),
                 r.name.c_str());
   }
@@ -193,12 +193,13 @@ int main(int argc, char** argv) {
   uint64_t spinCount = 0;
   while (true) {
     if (rosRunning && !ros::ok()) break;  // Ctrl+C（ROS 已接管信号）
+    if (bridge) {
+      bridge->spinOnce();               // 先收心跳 / cmd_vel
+      bridge->applyHeartbeatWatchdog();  // 超时则本步起强制 0 速
+    }
     sim.step(dt);
     if (!rosRunning && ++spinCount % 100 == 0) tryStartRos();  // 每 100 步探一次 master
-    if (bridge) {
-      bridge->publish(dt);
-      bridge->spinOnce();
-    }
+    if (bridge) bridge->publish(dt);
 #ifdef FLAT_SIM_HAVE_GUI
     if (gui) {
       if (!gui->poll(sim)) break;  // 关窗 / ESC → 退出

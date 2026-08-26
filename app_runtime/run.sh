@@ -14,11 +14,11 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -L)"
 ROS_RUNTIME="$(cd "${HERE}/../custom_mini_runtime" && pwd -L)"
 
 if [[ ! -x "${HERE}/bin/custom_ros_nodelet" \
-   || ! -f "${HERE}/lib/libtalker_nodelet.so" \
+   || ! -f "${HERE}/lib/libheartbeat_nodelet.so" \
    || ! -f "${HERE}/lib/liblistener_nodelet.so" ]]; then
   echo "app_runtime 不完整，请先分别:" >&2
   echo "  (cd app/custom_ros_nodelet && ./make.sh x86 && ./make.sh install)" >&2
-  echo "  (cd app/talker_nodelet && ./make.sh x86 && ./make.sh install)" >&2
+  echo "  (cd app/heartbeat_nodelet && ./make.sh x86 && ./make.sh install)" >&2
   echo "  (cd app/listener_nodelet && ./make.sh x86 && ./make.sh install)" >&2
   exit 1
 fi

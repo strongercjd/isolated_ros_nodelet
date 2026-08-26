@@ -6,7 +6,7 @@
 
 ```bash
 ./official_full.sh build
-ROS_INSTALL=$PWD/official_full_install (cd app/talker_nodelet && ./make.sh x86)
+ROS_INSTALL=$PWD/official_full_install (cd app/heartbeat_nodelet && ./make.sh x86)
 ROS_INSTALL=$PWD/official_full_install (cd app/listener_nodelet && ./make.sh x86)
 ./official_full.sh package
 ./official_full.sh run
@@ -52,7 +52,7 @@ ROS_INSTALL=$PWD/official_full_install (cd app/listener_nodelet && ./make.sh x86
 
 | 文件 | 作用 | 来源 | 本仓库 |
 |------|------|------|--------|
-| `libtalker_nodelet.so` | Talker（发送）Nodelet | 本仓库编写 | `app/talker_nodelet` |
+| `libheartbeat_nodelet.so` | 心跳 Nodelet | 本仓库编写 | `app/heartbeat_nodelet` |
 | `liblistener_nodelet.so` | Listener（接收）Nodelet | 本仓库编写 | `app/listener_nodelet` |
 | `libnodeletlib.so` | Nodelet 基类与进程内加载 | [ros/nodelet_core](https://github.com/ros/nodelet_core) | `src/nodelet_core` |
 | `libclass_loader.so` | 按路径加载 `.so` 里的 C++ 类 | [ros/class_loader](https://github.com/ros/class_loader) | `src/class_loader` |
@@ -81,7 +81,7 @@ ROS_INSTALL=$PWD/official_full_install (cd app/listener_nodelet && ./make.sh x86
 
 | 目录 | 作用 | 来源 | 本仓库 |
 |------|------|------|--------|
-| `talker_nodelet/` | `package.xml` + `nodelet_plugins.xml`（Talker） | 本仓库编写 | `app/talker_nodelet`（独立 CMake） |
+| `heartbeat_nodelet/` | `package.xml` + `nodelet_plugins.xml`（心跳，可选） | 本仓库编写 | `app/heartbeat_nodelet`（独立 CMake） |
 | `listener_nodelet/` | `package.xml` + `nodelet_plugins.xml`（Listener） | 本仓库编写 | `app/listener_nodelet`（独立 CMake） |
 | `nodelet/` | 官方 nodelet 包清单 | [ros/nodelet_core](https://github.com/ros/nodelet_core) | `src/nodelet_core` |
 | `rosout/` / `roslaunch/` | `roscore` 找 `rosout`、读 `roscore.xml` | [ros/ros_comm](https://github.com/ros/ros_comm) | `src/ros_comm` |

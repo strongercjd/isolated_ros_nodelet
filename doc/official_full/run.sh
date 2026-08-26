@@ -104,8 +104,8 @@ fi
 echo "nodelet manager 已就绪。"
 
 # load 的类名来自各包 share/*/nodelet_plugins.xml
-# 两个 load 都挂到同一个 manager，Talker / Listener 在同一进程里通信
-"${HERE}/bin/rosrun" nodelet nodelet load talker_nodelet/TalkerNodelet nodelet_manager __name:=talker &
+# 两个 load 都挂到同一个 manager；心跳 + Listener 在同一进程里
+"${HERE}/bin/rosrun" nodelet nodelet load heartbeat_nodelet/HeartbeatNodelet nodelet_manager __name:=heartbeat &
 PIDS+=($!)
 sleep 1
 "${HERE}/bin/rosrun" nodelet nodelet load listener_nodelet/ListenerNodelet nodelet_manager __name:=listener &

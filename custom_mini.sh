@@ -735,7 +735,7 @@ link_doc() {
 # -----------------------------------------------------------------------------
 cmd_build() {
   # 避免误把官方路径留下的插件软链编进本环境
-  for stale in my_nodelet_plugin talker_nodelet listener_nodelet; do
+  for stale in my_nodelet_plugin talker_nodelet heartbeat_nodelet listener_nodelet; do
     if [[ -L "${SRC}/${stale}" ]]; then
       rm -f "${SRC}/${stale}"
       log "removed stale symlink ${SRC}/${stale}"

@@ -477,7 +477,7 @@ fetch_ros() {
   fetch_github ros bond_core "${SRC}/bond_core" noetic-devel kinetic-devel
 
   # 应用层插件在 app/，已改为独立 CMake（无 catkin）；勿软链进 src/。
-  for stale in my_nodelet_plugin my_talker_nodelet my_listener_nodelet talker_nodelet listener_nodelet; do
+  for stale in my_nodelet_plugin my_talker_nodelet my_listener_nodelet talker_nodelet heartbeat_nodelet listener_nodelet; do
     if [[ -L "${SRC}/${stale}" ]]; then
       rm -f "${SRC}/${stale}"
       log "removed stale symlink src/${stale}"
@@ -701,7 +701,7 @@ link_doc() {
 # -----------------------------------------------------------------------------
 cmd_build() {
   # 避免误把插件软链编进本环境
-  for stale in my_nodelet_plugin my_talker_nodelet my_listener_nodelet talker_nodelet listener_nodelet; do
+  for stale in my_nodelet_plugin my_talker_nodelet my_listener_nodelet talker_nodelet heartbeat_nodelet listener_nodelet; do
     if [[ -L "${SRC}/${stale}" ]]; then
       rm -f "${SRC}/${stale}"
       log "removed stale symlink ${SRC}/${stale}"
@@ -772,7 +772,7 @@ install_app_share() {
 # Talker/Listener 来自 app/*/make.sh（须 ROS_INSTALL 指向本 install）。
 cmd_package() {
   local nodelet_bin="${INSTALL}/lib/nodelet/nodelet"
-  local talker listener
+  local heartbeat listener
   [[ -x "${INSTALL}/bin/roscore" ]] || fail "缺少 ${INSTALL}/bin/roscore，请先成功完成: $0 build"
   [[ -x "${INSTALL}/bin/rosmaster" ]] || fail "缺少 ${INSTALL}/bin/rosmaster，请先成功完成: $0 build"
   [[ -x "${INSTALL}/bin/rosrun" ]] || fail "缺少 ${INSTALL}/bin/rosrun，请先成功完成: $0 build"
@@ -780,8 +780,8 @@ cmd_package() {
   [[ -x "${INSTALL}/bin/rospack" ]] || fail "缺少 ${INSTALL}/bin/rospack，请先成功完成: $0 build"
   [[ -x "${INSTALL}/bin/catkin_find" ]] || fail "缺少 ${INSTALL}/bin/catkin_find，请先成功完成: $0 build"
   [[ -x "${nodelet_bin}" ]] || fail "缺少 ${nodelet_bin}，请先成功完成: $0 build"
-  talker="$(find_app_so talker_nodelet)" \
-    || fail "缺少 libtalker_nodelet.so。请先: ROS_INSTALL=${INSTALL} (cd app/talker_nodelet && ./make.sh x86)"
+  heartbeat="$(find_app_so heartbeat_nodelet)" \
+    || fail "缺少 libheartbeat_nodelet.so。请先: ROS_INSTALL=${INSTALL} (cd app/heartbeat_nodelet && ./make.sh x86)"
   listener="$(find_app_so listener_nodelet)" \
     || fail "缺少 liblistener_nodelet.so。请先: ROS_INSTALL=${INSTALL} (cd app/listener_nodelet && ./make.sh x86)"
   [[ -d "${DOC}" ]] || fail "缺少 ${DOC}"
@@ -805,7 +805,7 @@ cmd_package() {
   copy_bin_script catkin_find
   copy_pkg_bin nodelet nodelet
   copy_pkg_bin rosout rosout
-  cp -a "${talker}" "${RUNTIME}/lib/libtalker_nodelet.so"
+  cp -a "${heartbeat}" "${RUNTIME}/lib/libheartbeat_nodelet.so"
   cp -a "${listener}" "${RUNTIME}/lib/liblistener_nodelet.so"
 
   # nodelet / 插件 / rosout / rospack 各自 ldd，去重后拷非系统库
@@ -815,7 +815,7 @@ cmd_package() {
   done < <(
     {
       collect_nonsystem_libs "${nodelet_bin}"
-      collect_nonsystem_libs "${talker}"
+      collect_nonsystem_libs "${heartbeat}"
       collect_nonsystem_libs "${listener}"
       [[ -x "${INSTALL}/lib/rosout/rosout" ]] && collect_nonsystem_libs "${INSTALL}/lib/rosout/rosout"
       [[ -x "${INSTALL}/bin/rospack" ]] && collect_nonsystem_libs "${INSTALL}/bin/rospack"
@@ -823,7 +823,7 @@ cmd_package() {
   )
 
   copy_share_pkg nodelet || fail "缺少 share/nodelet"
-  install_app_share talker_nodelet
+  install_app_share heartbeat_nodelet
   install_app_share listener_nodelet
   copy_share_pkg rosout || true
   copy_share_pkg ros || true

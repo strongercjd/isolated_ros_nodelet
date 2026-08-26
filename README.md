@@ -38,7 +38,7 @@ chmod +x official_full.sh custom_mini.sh app/*/make.sh
 
 # 官方全量（首次约 15–30 分钟；脚本不编 app/）
 ./official_full.sh build
-ROS_INSTALL=$PWD/official_full_install (cd app/talker_nodelet && ./make.sh x86)
+ROS_INSTALL=$PWD/official_full_install (cd app/heartbeat_nodelet && ./make.sh x86)
 ROS_INSTALL=$PWD/official_full_install (cd app/listener_nodelet && ./make.sh x86)
 ./official_full.sh package
 ./official_full.sh run
@@ -48,7 +48,7 @@ ROS_INSTALL=$PWD/official_full_install (cd app/listener_nodelet && ./make.sh x86
 ./custom_mini.sh package
 ./custom_mini.sh run          # 打开 ROS 环境交互 shell（不是 demo）
 
-(cd app/talker_nodelet && ./make.sh x86 && ./make.sh install)
+(cd app/heartbeat_nodelet && ./make.sh x86 && ./make.sh install)
 (cd app/listener_nodelet && ./make.sh x86 && ./make.sh install)
 (cd app/custom_ros_nodelet && ./make.sh x86 && ./make.sh install)
 ./app_runtime/run.sh          # Talker / Listener demo
@@ -97,7 +97,7 @@ isolated_ros_nodelet/
 ├── custom_mini.sh           # 定制最小 ROS 环境（不含应用层）
 ├── app/                     # 应用层源码
 │   ├── custom_ros_nodelet/  # JSON 驱动的 manager（include/nlohmann/json.hpp；./make.sh）
-│   ├── talker_nodelet/      # 发送端软件包（./make.sh x86|install）
+│   ├── heartbeat_nodelet/   # 心跳软件包（./make.sh x86|install）
 │   └── listener_nodelet/    # 接收端软件包（./make.sh x86|install）
 ├── doc/
 │   ├── official_full/
@@ -127,7 +127,7 @@ isolated_ros_nodelet/
 
 应用层另做：
 ```bash
-ROS_INSTALL=$PWD/official_full_install (cd app/talker_nodelet && ./make.sh x86)
+ROS_INSTALL=$PWD/official_full_install (cd app/heartbeat_nodelet && ./make.sh x86)
 ROS_INSTALL=$PWD/official_full_install (cd app/listener_nodelet && ./make.sh x86)
 ./official_full.sh package
 ```
@@ -140,7 +140,7 @@ ROS_INSTALL=$PWD/official_full_install (cd app/listener_nodelet && ./make.sh x86
 
 1. 启动 `roscore`，等到 `/rosout`
 2. `rosrun nodelet nodelet manager`
-3. load `talker_nodelet/TalkerNodelet` 与 `listener_nodelet/ListenerNodelet`
+3. load `heartbeat_nodelet/HeartbeatNodelet` 与 `listener_nodelet/ListenerNodelet`
 
 Talker 每秒在 `chatter` 发 `std_msgs/String`；Listener 订阅并打印。两边日志交替即表示进程内通信正常。
 
@@ -148,7 +148,7 @@ Talker 每秒在 `chatter` 发 `std_msgs/String`；Listener 订阅并打印。�
 
 ```bash
 ls /opt/ros || echo "no /opt/ros"
-ldd official_full_install/lib/libtalker_nodelet.so
+ldd official_full_install/lib/libheartbeat_nodelet.so
 ldd official_full_install/lib/liblistener_nodelet.so
 ```
 
@@ -163,7 +163,7 @@ ldd official_full_install/lib/liblistener_nodelet.so
 | `official_full.sh` | 官方全量：`build` → install，`package` → runtime |
 | `custom_mini.sh` | 定制最小 ROS 环境：`build` → `custom_mini_install/`，`run` → 交互 shell |
 | `app/custom_ros_nodelet/make.sh` | manager：`x86` 编译，`install` → `app_runtime/bin/` |
-| `app/talker_nodelet/make.sh` | 发送端：`x86` 编译，`install` → `app_runtime/lib/` |
+| `app/heartbeat_nodelet/make.sh` | 心跳：`x86` 编译，`install` → `app_runtime/lib/` |
 | `app/listener_nodelet/make.sh` | 接收端：`x86` 编译，`install` → `app_runtime/lib/` |
 | `doc/official_full/` | 官方 runtime 的 `run.sh` / README |
 | `doc/custom_mini/` | ROS 环境 runtime 的 `env.sh` / `run.sh` / README |
@@ -171,11 +171,11 @@ ldd official_full_install/lib/liblistener_nodelet.so
 | `python_compat/sitecustomize.py` | 补回 `collections.Mapping`、`inspect.getargspec`，并 `import setuptools` 恢复 `distutils` |
 | `python_compat/imp.py` | 给仍 `import imp` 的 ROS 脚本提供 `load_source` |
 | `src/libuuid/` | 兼容 `uuid/uuid.h` 的小型共享库，避免系统 `uuid-dev` |
-| `app/talker_nodelet/` | 发送端 Nodelet（独立 CMake，编译不依赖 `package.xml`） |
+| `app/heartbeat_nodelet/` | 心跳 Nodelet（独立 CMake，编译不依赖 `package.xml`） |
 | `app/listener_nodelet/` | 接收端 Nodelet（同上） |
 | `app/custom_ros_nodelet/` | JSON 驱动的 manager（无 catkin） |
 
-### `app/talker_nodelet` / `app/listener_nodelet`
+### `app/heartbeat_nodelet` / `app/listener_nodelet`
 
 | 文件 | 作用 |
 |------|------|
@@ -288,4 +288,4 @@ RV1126 一类设备内核需 Linux 4.19+。在目标架构上重新 `./official_
 不能，会破坏隔离。
 
 **如何只重编插件？**  
-分别 `cd app/talker_nodelet` / `app/listener_nodelet`（以及需要时的 `custom_ros_nodelet`）后 `./make.sh x86`。对着官方 install 时加 `ROS_INSTALL=$PWD/official_full_install`；定制路径默认用 `custom_mini_install`，再 `./make.sh install` → `app_runtime/`。`official_full.sh` / `custom_mini.sh` 都不会编 `app/`。
+分别 `cd app/heartbeat_nodelet` / `app/listener_nodelet`（以及需要时的 `custom_ros_nodelet`）后 `./make.sh x86`。对着官方 install 时加 `ROS_INSTALL=$PWD/official_full_install`；定制路径默认用 `custom_mini_install`，再 `./make.sh install` → `app_runtime/`。`official_full.sh` / `custom_mini.sh` 都不会编 `app/`。

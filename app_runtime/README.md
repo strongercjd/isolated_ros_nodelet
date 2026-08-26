@@ -3,7 +3,7 @@
 ```bash
 ./custom_mini.sh build && ./custom_mini.sh package
 
-(cd app/talker_nodelet && ./make.sh x86 && ./make.sh install)
+(cd app/heartbeat_nodelet && ./make.sh x86 && ./make.sh install)
 (cd app/listener_nodelet && ./make.sh x86 && ./make.sh install)
 (cd app/custom_ros_nodelet && ./make.sh x86 && ./make.sh install)
 (cd app/slam2d_nodelet && ./make.sh x86 && ./make.sh install)   # Eigen 头文件已由 custom_mini.sh 内置提供
@@ -18,7 +18,7 @@
 | 路径 | 作用 |
 |------|------|
 | `bin/custom_ros_nodelet_manager` | 读 `plugins.json`，加载插件 |
-| `lib/libtalker_nodelet.so` | 发送端（`app/talker_nodelet`） |
+| `lib/libheartbeat_nodelet.so` | 心跳（`app/heartbeat_nodelet`） |
 | `lib/liblistener_nodelet.so` | 接收端（`app/listener_nodelet`） |
 | `lib/libslam2d_nodelet.so` | 2D 激光 SLAM（`app/slam2d_nodelet`，详见其 README） |
 | `plugins.json` | 插件列表 + 日志配置（见下） |

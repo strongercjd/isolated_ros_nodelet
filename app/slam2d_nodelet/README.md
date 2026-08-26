@@ -110,7 +110,7 @@ OccupancyGrid 发布时做了行翻转（内部 GridMap row0 在 y 最大侧，�
 
 ```text
 app/slam2d_nodelet/
-├── CMakeLists.txt          照 talker_nodelet 模式（SHARED + PIC）
+├── CMakeLists.txt          照 heartbeat_nodelet 模式（SHARED + PIC）
 ├── make.sh                 x86 编译 / install 拷 .so → app_runtime/lib
 ├── include/slam2d_nodelet.h
 └── src/

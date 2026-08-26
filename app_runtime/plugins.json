@@ -13,9 +13,9 @@
   },
   "plugins": [
     {
-      "name": "/talker",
-      "class": "talker_nodelet::TalkerNodelet",
-      "library": "libtalker_nodelet.so",
+      "name": "/heartbeat",
+      "class": "heartbeat_nodelet::HeartbeatNodelet",
+      "library": "libheartbeat_nodelet.so",
       "enabled": true,
       "remap": {},
       "args": []

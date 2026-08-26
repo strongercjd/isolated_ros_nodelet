@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # =============================================================================
-# app/talker_nodelet/make.sh — 发送端独立软件包（无 catkin）
+# app/heartbeat_nodelet/make.sh — 心跳独立软件包（无 catkin）
 # -----------------------------------------------------------------------------
-#   ./make.sh x86       编译 libtalker_nodelet.so → build/
+#   ./make.sh x86       编译 libheartbeat_nodelet.so → build/
 #   ./make.sh install   安装到 ../../app_runtime/lib/
 #   ./make.sh clean
 #
@@ -19,7 +19,7 @@ DOC="${ROOT}/doc/app"
 JOBS="$(nproc 2>/dev/null || echo 4)"
 PY_SITE="${ROS_INSTALL}/lib/python3.12/site-packages"
 PY_COMPAT="${ROOT}/python_compat"
-SO_NAME="libtalker_nodelet.so"
+SO_NAME="libheartbeat_nodelet.so"
 
 fail() { echo "ERROR: $*" >&2; exit 1; }
 
@@ -55,7 +55,7 @@ find_so() {
 
 cmd_x86() {
   prepare_env
-  echo "==== talker_nodelet x86 build ===="
+  echo "==== heartbeat_nodelet x86 build ===="
   mkdir -p "${BUILD}"
   local extra_flags="-I${ROS_INSTALL}/include -DBOOST_BIND_GLOBAL_PLACEHOLDERS -DBOOST_NO_CXX98_FUNCTION_BASE -Wno-deprecated-declarations -fpermissive"
   cmake -S "${PKG}" -B "${BUILD}" \
@@ -75,7 +75,7 @@ cmd_x86() {
 cmd_install() {
   local so; so="$(find_so)" || fail "缺少 ${SO_NAME}，请先: $0 x86"
   mkdir -p "${RUNTIME}/lib"
-  rm -f "${RUNTIME}/lib/libmy_talker_nodelet.so"
+  rm -f "${RUNTIME}/lib/libtalker_nodelet.so" "${RUNTIME}/lib/libmy_talker_nodelet.so"
   cp -a "${so}" "${RUNTIME}/lib/${SO_NAME}"
   echo "INSTALLED: ${RUNTIME}/lib/${SO_NAME}"
 }

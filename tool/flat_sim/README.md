@@ -32,7 +32,7 @@ tool/flat_sim/
 │   ├── core/            世界模型、差速运动、激光射线、碰撞（不依赖 ROS/GUI）
 │   ├── format/          .fworld / .frobot 解析（# 备注在解析层丢弃）
 │   ├── gui/             SDL2 2D 俯视图 + SLAM 建图视图（可选，headless 构建不链 SDL）
-│   └── ros/             话题桥接（odom / base_scan / cmd_vel，无 TF）
+│   └── ros/             话题桥接（odom / base_scan / cmd_vel / heartbeat，无 TF）
 │                        + SlamListener（订阅 /slam2d/* 供右半视图）
 ├── models/              示例机器人模型（.frobot）
 ├── worlds/              示例世界（.fworld）
@@ -90,9 +90,12 @@ tool/flat_sim/
 | 发布 | `/mycar/odom` | `nav_msgs/Odometry` | 里程计位姿与速度（频率 = 1/步长） |
 | 发布 | `/mycar/base_scan` | `sensor_msgs/LaserScan` | 2D 激光（第 2 个激光起 `base_scan_2`…） |
 | 订阅 | `/mycar/cmd_vel` | `geometry_msgs/Twist` | `linear.x` 线速度 m/s、`angular.z` 角速度 rad/s |
+| 订阅 | `/heartbeat` | `std_msgs/Empty` | 控制节点心跳（`heartbeat_nodelet` 每 100ms）；首次收到后启用看门狗 |
 | 订阅 | `/slam2d/map` 等 | OccupancyGrid / PointCloud2 / PoseStamped | SLAM 视图数据（右半分屏渲染用） |
 | 发布 | `/slam2d/reset` | `std_msgs/Empty` | GUI 按 `r` 复位机器人时联动复位 SLAM |
 
+- **心跳看门狗**：首次收到 `/heartbeat` 后，若连续 **500ms** 未再收到，视为控制节点停止，
+  强制所有机器人 0 速并忽略 `cmd_vel`，直到心跳恢复。未收到过心跳时不干预（纯遥操仍可用）。
 - **无 TF**：`frame_id` / `child_frame_id` 只是字符串占位（`odom` / `base_link` / `<name>/laser`），
   flat_sim 不维护、不广播 TF 树。应用层需要坐标变换时，用「车体位姿 + 激光相对位姿」
   在自己的节点里做三角函数换算即可。
