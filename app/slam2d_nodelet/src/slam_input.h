@@ -102,7 +102,8 @@ private:
         float angle = scan.angle_min;
         for (const float range : scan.ranges)
         {
-            if (range >= scan.range_min && range <= scan.range_max && range <= 50.0f)
+            // isfinite 剔除无回波（inf/NaN，含 flat_sim 与真实雷达驱动的约定）
+            if (std::isfinite(range) && range >= scan.range_min && range <= scan.range_max)
                 cloud.push_back(unity::PointType(std::cos(angle) * range,
                                                  std::sin(angle) * range));
             angle += scan.angle_increment;

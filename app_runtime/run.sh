@@ -83,6 +83,10 @@ cleanup() {
 }
 trap cleanup INT TERM EXIT
 
+# 每次启动前删除上一轮日志（路径与 plugins.json 的 log.dir/log.file 对应）
+LOG_FILE="${HERE}/data/log/custom_ros_nodelet.log"
+rm -f "${LOG_FILE}"
+
 echo "启动 custom_ros_nodelet ..."
 "${HERE}/bin/custom_ros_nodelet" "${HERE}/plugins.json" &
 PIDS+=($!)

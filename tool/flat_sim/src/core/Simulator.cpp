@@ -3,6 +3,7 @@
 
 #include <cmath>
 #include <cstdio>
+#include <limits>
 
 namespace flat_sim {
 
@@ -101,7 +102,9 @@ void Simulator::updateLasers(RobotState& r) {
     s.angleInc = ld.samples > 1 ? ld.fov / (ld.samples - 1) : 0.0;
     // 单线时取视场中心；多线从 -fov/2 起
     s.angleStart = s.origin.yaw - ld.fov / 2.0 + (ld.samples == 1 ? ld.fov / 2.0 : 0.0);
-    s.ranges.assign((size_t)std::max(1, ld.samples), (float)ld.rangeMax);
+    // 无回波 = inf（ROS 惯例，REP 117）：消费方按 !isfinite / >range_max 剔除；
+    // 填 rangeMax 会被下游当成量程边界处的真实障碍物。
+    s.ranges.assign((size_t)std::max(1, ld.samples), std::numeric_limits<float>::infinity());
     for (int k = 0; k < ld.samples; ++k) {
       const double ang = s.angleStart + s.angleInc * (double)k;
       const double t = castRay(s.origin.p, Vec2{std::cos(ang), std::sin(ang)}, &r);

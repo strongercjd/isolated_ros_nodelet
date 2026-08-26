@@ -21,7 +21,7 @@ class Simulator {
     int samples = 0;
     double rangeMin = 0.0;
     double rangeMax = 10.0;
-    std::vector<float> ranges;  // 米；无回波 = rangeMax
+    std::vector<float> ranges;  // 米；无回波 = inf
   };
 
   struct RobotState {

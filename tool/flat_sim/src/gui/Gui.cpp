@@ -274,6 +274,7 @@ void Gui::draw(const Simulator& sim, const SlamSnapshot* slam) {
         for (size_t k = 0; k < s.ranges.size(); ++k) {
           const double ang = s.angleStart + s.angleInc * (double)k;
           const double d = s.ranges[k];
+          if (!std::isfinite(d)) continue;  // 无回波光束不画
           g.line(s.origin.p, s.origin.p + Vec2{d * std::cos(ang), d * std::sin(ang)}, kLaser);
         }
       }
