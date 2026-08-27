@@ -60,17 +60,18 @@ void BaseNaviNodelet::onInit()
     const int pass_half = std::max(2, static_cast<int>(std::ceil(robot_radius_ / 0.05)));
     frontier_params_.pass_half_window = pass_half;
 
-    // 话题走 remap（plugins.json: map→/slam2d/map, pose→/slam2d/pose,
-    //   scan→/mycar/base_scan, odom→/mycar/odom, cmd_vel→/mycar/cmd_vel）
-    map_sub_ = pnh.subscribe("map", 1, &BaseNaviNodelet::mapCallback, this);
-    pose_sub_ = pnh.subscribe("pose", 5, &BaseNaviNodelet::poseCallback, this);
-    scan_sub_ = pnh.subscribe("scan", 5, &BaseNaviNodelet::scanCallback, this);
-    odom_sub_ = pnh.subscribe("odom", 10, &BaseNaviNodelet::odomCallback, this);
-    cmd_sub_ = pnh.subscribe("cmd", 5, &BaseNaviNodelet::cmdCallback, this);
+    // 话题写死全局名（不再依赖 plugins.json remap）：map=/slam2d/map, pose=/slam2d/pose,
+    //   scan=/mycar/base_scan, odom=/mycar/odom, cmd_vel=/mycar/cmd_vel；
+    //   cmd/state/goal 挂在 /base_navi 下
+    map_sub_ = pnh.subscribe("/slam2d/map", 1, &BaseNaviNodelet::mapCallback, this);
+    pose_sub_ = pnh.subscribe("/slam2d/pose", 5, &BaseNaviNodelet::poseCallback, this);
+    scan_sub_ = pnh.subscribe("/mycar/base_scan", 5, &BaseNaviNodelet::scanCallback, this);
+    odom_sub_ = pnh.subscribe("/mycar/odom", 10, &BaseNaviNodelet::odomCallback, this);
+    cmd_sub_ = pnh.subscribe("/base_navi/cmd", 5, &BaseNaviNodelet::cmdCallback, this);
 
-    vel_pub_ = pnh.advertise<geometry_msgs::Twist>("cmd_vel", 5);
-    state_pub_ = pnh.advertise<custom_msgs::NaviState>("state", 5);
-    goal_pub_ = pnh.advertise<geometry_msgs::PoseStamped>("goal", 5);
+    vel_pub_ = pnh.advertise<geometry_msgs::Twist>("/mycar/cmd_vel", 5);
+    state_pub_ = pnh.advertise<custom_msgs::NaviState>("/base_navi/state", 5);
+    goal_pub_ = pnh.advertise<geometry_msgs::PoseStamped>("/base_navi/goal", 5);
 
     worker_ = std::thread(&BaseNaviNodelet::workerLoop, this);
     NODELET_INFO("BaseNaviNodelet initialized: hz=%.0f v_max=%.2f w_max=%.2f stop_limit=%d "

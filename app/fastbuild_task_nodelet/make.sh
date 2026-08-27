@@ -84,13 +84,7 @@ cmd_install() {
       "class": "fastbuild_task_nodelet::FastbuildTaskNodelet",
       "library": "libfastbuild_task_nodelet.so",
       "enabled": true,
-      "remap": {
-        "/fastbuild_task/cmd": "/fastbuild_task/cmd",
-        "/fastbuild_task/navi_state": "/fastbuild_navi/state",
-        "/fastbuild_task/navi_cmd": "/fastbuild_navi/cmd",
-        "/fastbuild_task/cmd_vel": "/mycar/cmd_vel",
-        "/fastbuild_task/state": "/fastbuild_task/state"
-      },
+      "remap": {},
       "args": []
     }
 EOF

@@ -50,7 +50,7 @@ prepare_env() {
   export LD_LIBRARY_PATH="${ROS_INSTALL}/lib${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}"
   export PATH="${ROS_INSTALL}/bin:${PATH}"
   # catkin 系 Config.cmake 在 configure 阶段要 import em / catkin_pkg 等，
-  # PYTHONPATH 必须指向隔离 ROS 的 python 包目录（与 stage_ros 的 build.sh 相同）。
+  # PYTHONPATH 必须指向隔离 ROS 的 python 包目录。
   local pyver
   pyver="$(python3 -c 'import sys; print("%d.%d" % (sys.version_info[0], sys.version_info[1]))')"
   export PYTHONPATH="${REPO}/python_compat:${ROS_INSTALL}/lib/python${pyver}/site-packages:${ROS_INSTALL}/local/lib/python${pyver}/dist-packages:${ROS_INSTALL}/lib/python3/dist-packages:${ROS_INSTALL}/lib/python${pyver}/dist-packages${PYTHONPATH:+:${PYTHONPATH}}"

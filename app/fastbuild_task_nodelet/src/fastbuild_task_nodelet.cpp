@@ -7,16 +7,17 @@ void FastbuildTaskNodelet::onInit()
 {
     ros::NodeHandle pnh = getPrivateNodeHandle();
 
-    pnh.param("max_duration_s", max_duration_s_, 600.0);
+    pnh.param("max_duration_s", max_duration_s_, 600.0);//600s 超时时间 ros参数
 
-    // 话题走 remap（plugins.json: cmd→/fastbuild_task/cmd, navi_state→/base_navi/state,
-    //   navi_cmd→/base_navi/cmd, cmd_vel→/mycar/cmd_vel, state→/fastbuild_task/state）
-    cmd_sub_ = pnh.subscribe("cmd", 5, &FastbuildTaskNodelet::taskCmdCallback, this);
-    navi_state_sub_ = pnh.subscribe("navi_state", 5, &FastbuildTaskNodelet::naviStateCallback, this);
+    // 话题写死全局名（不再依赖 plugins.json remap）：cmd=/fastbuild_task/cmd,
+    //   navi_state=/base_navi/state, navi_cmd=/base_navi/cmd, cmd_vel=/mycar/cmd_vel,
+    //   state=/fastbuild_task/state
+    cmd_sub_ = pnh.subscribe("/fastbuild_task/cmd", 5, &FastbuildTaskNodelet::taskCmdCallback, this);
+    navi_state_sub_ = pnh.subscribe("/base_navi/state", 5, &FastbuildTaskNodelet::naviStateCallback, this);
 
-    navi_cmd_pub_ = pnh.advertise<custom_msgs::NaviCmd>("navi_cmd", 5);
-    vel_pub_ = pnh.advertise<geometry_msgs::Twist>("cmd_vel", 5);
-    state_pub_ = pnh.advertise<custom_msgs::TaskState>("state", 5, true /*latch：迟订阅者也能拿到终态*/);
+    navi_cmd_pub_ = pnh.advertise<custom_msgs::NaviCmd>("/base_navi/cmd", 5);
+    vel_pub_ = pnh.advertise<geometry_msgs::Twist>("/mycar/cmd_vel", 5);
+    state_pub_ = pnh.advertise<custom_msgs::TaskState>("/fastbuild_task/state", 5, true /*latch：迟订阅者也能拿到终态*/);
 
     watchdog_ = pnh.createTimer(ros::Duration(5.0), &FastbuildTaskNodelet::watchdogTimer, this);
     NODELET_INFO("FastbuildTaskNodelet initialized: max_duration_s=%.0f", max_duration_s_);
@@ -68,16 +69,18 @@ void FastbuildTaskNodelet::naviStateCallback(const custom_msgs::NaviState::Const
     if (msg->state == custom_msgs::NaviState::FINISH)
         finishTask(custom_msgs::TaskState::REASON_IS_FINISH, "navi reported FINISH");
     else if (msg->state == custom_msgs::NaviState::ABORT)
-        finishTask(custom_msgs::TaskState::REASON_FAIL, "navi reported ABORT");
+        finishTask(custom_msgs::TaskState::REASON_FAIL, "navi reported ABORT");//
 }
+
 
 void FastbuildTaskNodelet::watchdogTimer(const ros::TimerEvent &)
 {
     if (state_ != TaskRunState::RUNNING)
         return;
     if ((ros::Time::now() - t0_).toSec() > max_duration_s_)
-        finishTask(custom_msgs::TaskState::REASON_ERROR, "watchdog timeout");
+        finishTask(custom_msgs::TaskState::REASON_ERROR, "watchdog timeout");//
 }
+
 
 // 收尾序列：先置 IDLE（防重入），再停 navi、零速兜底、发终态（对齐原 setComplete + clearSpeed）
 void FastbuildTaskNodelet::finishTask(uint8_t reason, const char *why)
@@ -87,7 +90,7 @@ void FastbuildTaskNodelet::finishTask(uint8_t reason, const char *why)
 
     sendNaviCmd(custom_msgs::NaviCmd::CMD_STOP);
     publishZeroVel(); // 停在原地：保持式 cmd_vel，双发兜底
-    publishZeroVel();
+    publishZeroVel(); 
 
     publishTaskState(custom_msgs::TaskState::STATE_DONE, reason, latest_area_m2_, cost);
     NODELET_INFO("task DONE: reason=%u (%s) area=%.1f m2 cost=%.0f s", reason, why,

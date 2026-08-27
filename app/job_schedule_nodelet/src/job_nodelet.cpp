@@ -7,13 +7,14 @@ void JobNodelet::onInit()
 {
     ros::NodeHandle pnh = getPrivateNodeHandle();
 
-    // 话题走 remap（plugins.json: cmd→/job_node/cmd, task_state→/fastbuild_task/state,
-    //   fastbuild_cmd→/fastbuild_task/cmd, task_result→/task/TaskResult）
-    cmd_sub_ = pnh.subscribe("cmd", 5, &JobNodelet::jobCmdCallback, this);
-    task_state_sub_ = pnh.subscribe("task_state", 5, &JobNodelet::taskStateCallback, this);
+    // 话题写死全局名（不再依赖 plugins.json remap）：cmd=/job_node/cmd,
+    //   task_state=/fastbuild_task/state, fastbuild_cmd=/fastbuild_task/cmd,
+    //   task_result=/task/TaskResult
+    cmd_sub_ = pnh.subscribe("/job_node/cmd", 5, &JobNodelet::jobCmdCallback, this);
+    task_state_sub_ = pnh.subscribe("/fastbuild_task/state", 5, &JobNodelet::taskStateCallback, this);
 
-    fastbuild_cmd_pub_ = pnh.advertise<custom_msgs::FastBuildCmd>("fastbuild_cmd", 5);
-    task_result_pub_ = pnh.advertise<custom_msgs::TaskResult>("task_result", 5);
+    fastbuild_cmd_pub_ = pnh.advertise<custom_msgs::FastBuildCmd>("/fastbuild_task/cmd", 5);
+    task_result_pub_ = pnh.advertise<custom_msgs::TaskResult>("/task/TaskResult", 5);
 
     NODELET_INFO("JobNodelet initialized (fastbuild chain: JobCmd -> FastBuildCmd -> TaskState -> TaskResult)");
 }

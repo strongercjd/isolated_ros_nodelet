@@ -27,17 +27,18 @@ void Slam2dNodelet::onInit()
     pnh.param("map_publish_period", map_publish_period_, 1.0);
     pnh.param("publish_clouds", publish_clouds_, true);
 
-    // 输入话题名走 remap（plugins.json: scan→/mycar/base_scan, odom→/mycar/odom, reset→/slam2d/reset）
-    scan_sub_ = pnh.subscribe("scan", 5, &Slam2dNodelet::scanCallback, this);
-    odom_sub_ = pnh.subscribe("odom", 10, &Slam2dNodelet::odomCallback, this);
-    reset_sub_ = pnh.subscribe("reset", 1, &Slam2dNodelet::resetCallback, this);
+    // 话题写死全局名（不再依赖 plugins.json remap）：输入 scan=/mycar/base_scan,
+    //   odom=/mycar/odom, reset=/slam2d/reset；输出 map/pose 等挂在 /slam2d 下
+    scan_sub_ = pnh.subscribe("/mycar/base_scan", 5, &Slam2dNodelet::scanCallback, this);
+    odom_sub_ = pnh.subscribe("/mycar/odom", 10, &Slam2dNodelet::odomCallback, this);
+    reset_sub_ = pnh.subscribe("/slam2d/reset", 1, &Slam2dNodelet::resetCallback, this);
 
-    map_pub_ = pnh.advertise<nav_msgs::OccupancyGrid>("map", 1, true /*latch*/);
-    pose_pub_ = pnh.advertise<geometry_msgs::PoseStamped>("pose", 1);
+    map_pub_ = pnh.advertise<nav_msgs::OccupancyGrid>("/slam2d/map", 1, true /*latch*/);
+    pose_pub_ = pnh.advertise<geometry_msgs::PoseStamped>("/slam2d/pose", 1);
     if (publish_clouds_)
     {
-        input_cloud_pub_ = pnh.advertise<sensor_msgs::PointCloud2>("input_cloud", 1);
-        mapping_cloud_pub_ = pnh.advertise<sensor_msgs::PointCloud2>("mapping_cloud", 1);
+        input_cloud_pub_ = pnh.advertise<sensor_msgs::PointCloud2>("/slam2d/input_cloud", 1);
+        mapping_cloud_pub_ = pnh.advertise<sensor_msgs::PointCloud2>("/slam2d/mapping_cloud", 1);
     }
 
     worker_ = std::thread(&Slam2dNodelet::workerLoop, this);

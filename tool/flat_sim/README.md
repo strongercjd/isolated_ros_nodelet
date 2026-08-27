@@ -1,24 +1,19 @@
 # flat_sim —— 自研 2D 机器人仿真（纯平面 / 无 TF / 无 URDF）
 
 flat_sim 是仓库自研的**轻量 2D 仿真工具**：加载自研格式的世界/机器人文件，
-做差速运动 + 激光射线仿真，并对接 ROS 话题。与 `tool/stage_ros` 并列、互不依赖。
+做差速运动 + 激光射线仿真，并对接 ROS 话题。
 
 GUI 为**左右分屏**：左半 2D 俯视仿真视图；右半 SLAM 建图视图（订阅
 `app/slam2d_nodelet` 发布的 `/slam2d/*` 话题实时渲染，无 rosmaster 或 SLAM
 未运行时仅显示网格占位），显示内容与参考工程 lidarslam_2d 的画布一致：
 灰度占用地图、5 m 网格线、红色 input_cloud、蓝色 mapping_cloud、蓝色位姿箭头。
 
-与 stage_ros 的对照：
+- 世界文件：**自研 `.fworld`**（缩进块 + `#` 备注）
+- 机器人：**自研 `.frobot`**（形状 + 传感器挂载；**无 URDF**）
+- 坐标变换：**不发 TF**，由应用层自行换算
+- 构建：源码全在本目录，纯 CMake
 
-| 维度 | stage_ros | flat_sim |
-|------|-----------|----------|
-| 显示 | Stage GUI（偏 2.5D / 可旋转） | **纯 2D 俯视**（SDL2，可关） |
-| 世界文件 | Stage `.world`（define/include 较繁） | **自研 `.fworld`**（缩进块 + `#` 备注） |
-| 机器人 | Stage model + xacro URDF + TF | **自研 `.frobot`**（形状 + 传感器挂载；**无 URDF**） |
-| 坐标变换 | 发 TF | **不发 TF**，由应用层自行换算 |
-| 构建 | 下载 Stage + catkin 编 stage_ros | 源码全在本目录，纯 CMake |
-
-定位：**仿真显示与基础运动/传感模拟**，不是完整物理引擎，也不追求 Gazebo/Stage 功能全集。
+定位：**仿真显示与基础运动/传感模拟**，不是完整物理引擎。
 
 ## 目录结构
 
@@ -51,7 +46,7 @@ tool/flat_sim/
 | `cmake` | 构建系统 |
 | `libsdl2-dev` | 2D GUI（仅 GUI 需要；**headless 不需要，也不需要显示器**） |
 
-`./build.sh deps` 会检测缺失并用 sudo 安装（与 stage_ros 相同约定）。
+`./build.sh deps` 会检测缺失并用 sudo 安装。
 
 ## 使用方法
 

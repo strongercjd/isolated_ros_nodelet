@@ -33,11 +33,7 @@
       "class": "slam2d_nodelet::Slam2dNodelet",
       "library": "libslam2d_nodelet.so",
       "enabled": true,
-      "remap": {
-        "/slam2d/scan": "/mycar/base_scan",
-        "/slam2d/odom": "/mycar/odom",
-        "/slam2d/reset": "/slam2d/reset"
-      },
+      "remap": {},
       "args": []
     },
     {
@@ -45,16 +41,7 @@
       "class": "base_navi_nodelet::BaseNaviNodelet",
       "library": "libbase_navi_nodelet.so",
       "enabled": true,
-      "remap": {
-        "/base_navi/map": "/slam2d/map",
-        "/base_navi/pose": "/slam2d/pose",
-        "/base_navi/scan": "/mycar/base_scan",
-        "/base_navi/odom": "/mycar/odom",
-        "/base_navi/cmd_vel": "/mycar/cmd_vel",
-        "/base_navi/cmd": "/base_navi/cmd",
-        "/base_navi/state": "/base_navi/state",
-        "/base_navi/goal": "/base_navi/goal"
-      },
+      "remap": {},
       "args": []
     },
     {
@@ -62,13 +49,7 @@
       "class": "fastbuild_task_nodelet::FastbuildTaskNodelet",
       "library": "libfastbuild_task_nodelet.so",
       "enabled": true,
-      "remap": {
-        "/fastbuild_task/cmd": "/fastbuild_task/cmd",
-        "/fastbuild_task/navi_state": "/base_navi/state",
-        "/fastbuild_task/navi_cmd": "/base_navi/cmd",
-        "/fastbuild_task/cmd_vel": "/mycar/cmd_vel",
-        "/fastbuild_task/state": "/fastbuild_task/state"
-      },
+      "remap": {},
       "args": []
     },
     {
@@ -76,12 +57,7 @@
       "class": "job_schedule_nodelet::JobNodelet",
       "library": "libjob_schedule_nodelet.so",
       "enabled": true,
-      "remap": {
-        "/job_node/cmd": "/job_node/cmd",
-        "/job_node/fastbuild_cmd": "/fastbuild_task/cmd",
-        "/job_node/task_state": "/fastbuild_task/state",
-        "/job_node/task_result": "/task/TaskResult"
-      },
+      "remap": {},
       "args": []
     }
   ]

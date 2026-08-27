@@ -69,25 +69,19 @@ runtime 说明见：
 - [doc/custom_mini/README.md](doc/custom_mini/README.md)
 - [doc/app/README.md](doc/app/README.md)
 
-## Stage 仿真（stage_ros，独立于 src/）
+## 工具集（tool/，独立于 src/）
 
-`tool/` 是仓库的**工具集**，目前只含一个工具 **stage_ros**（Stage 机器人仿真环境），
-与 `src/` 组件无关：每个工具自包含在 `tool/<工具>/` 下（源码、独立编译/运行脚本、
-README 都在里面），只依赖 `custom_mini.sh build` 编出的隔离 ROS 环境。
-Stage 需要 FLTK 等系统库，tool 工具**允许 apt 安装**（清单见
-[tool/stage_ros/README.md](tool/stage_ros/README.md)）。
+`tool/` 是仓库的**工具集**，与 `src/` 组件无关：每个工具自包含在 `tool/<工具>/` 下
+（源码、独立编译/运行脚本、README 都在里面），只依赖 `custom_mini.sh build` 编出的
+隔离 ROS 环境。工具**允许 apt 安装**系统库（清单见各工具 README）。
 
 ```bash
-./custom_mini.sh build             # 隔离 ROS 环境（首次，约 15–30 分钟）
-./tool/stage_ros/build.sh deps     # apt 装 FLTK/JPEG/PNG/OpenGL 等系统依赖（首次）
-./tool/stage_ros/build.sh          # 编译 Stage + stage_ros
-./run_stage.sh                     # 默认弹出 Stage GUI 仿真窗口
-./run_stage.sh --headless          # 无界面（CI / 无显示器）
+./custom_mini.sh build                  # 隔离 ROS 环境（首次，约 15–30 分钟）
+./tool/flat_sim/build.sh                # 编译 flat_sim（GUI 需要 SDL2；headless 不需要）
+./tool/flat_sim/run_flat_sim.sh         # 运行仿真（--headless 无界面）
 ```
 
-环境用 Stage 版 `box_house.world`，机器人模型用 `xacro/mycar.urdf.xacro`（渲染成 URDF 发
-`/robot_description`）。工具总览见 [tool/README.md](tool/README.md)，stage_ros 详见
-[tool/stage_ros/README.md](tool/stage_ros/README.md)。
+工具总览见 [tool/README.md](tool/README.md)。
 
 ## 仓库结构
 
@@ -106,7 +100,8 @@ isolated_ros_nodelet/
 ├── python_compat/
 ├── src/                     # ROS / 第三方源码（libuuid 等）
 ├── tool/                    # 工具集（每个工具自包含子目录；总览见 tool/README.md）
-│   └── stage_ros/           # Stage 仿真（stage_ros，独立编译/运行脚本；见 tool/stage_ros/README.md）
+│   ├── flat_sim/            # 自研 2D 仿真（见 tool/flat_sim/README.md）
+│   └── flat_sim_teleop/     # 键盘遥控（见 tool/flat_sim_teleop/README.md）
 ├── official_full_{install,build,runtime,logs}/
 ├── custom_mini_{install,build,runtime,logs}/
 └── app_runtime/             # 应用产物（各 make.sh install）

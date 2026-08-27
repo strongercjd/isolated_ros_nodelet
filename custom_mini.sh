@@ -496,28 +496,8 @@ fetch_ros() {
   fetch_github ros class_loader "${SRC}/class_loader" noetic-devel kinetic-devel
   fetch_github ros nodelet_core "${SRC}/nodelet_core" noetic-devel kinetic-devel indigo-devel
   fetch_github ros bond_core "${SRC}/bond_core" noetic-devel kinetic-devel
-  # stage_ros（Stage 仿真）需要的消息 / 几何 / tf 依赖，以及 xacro 工具。
+  # common_msgs：sensor_msgs / nav_msgs / geometry_msgs 等，应用层与 flat_sim 需要。
   fetch_github ros common_msgs "${SRC}/common_msgs" noetic-devel kinetic-devel
-  fetch_github ros geometry "${SRC}/geometry" noetic-devel kinetic-devel
-  fetch_github ros geometry2 "${SRC}/geometry2" noetic-devel kinetic-devel
-  fetch_github ros angles "${SRC}/angles" noetic-devel
-  fetch_github ros actionlib "${SRC}/actionlib" noetic-devel
-  fetch_github ros roslint "${SRC}/roslint" master
-  fetch_github ros xacro "${SRC}/xacro" noetic-devel
-
-  # geometry2 / geometry 里用不到的子包（依赖 Eigen / KDL / Bullet / OpenCV 等系统库）。
-  ignore_package tf2_bullet
-  ignore_package tf2_eigen
-  ignore_package tf2_geometry_msgs
-  ignore_package tf2_kdl
-  ignore_package tf2_sensor_msgs
-  ignore_package tf2_tools
-  ignore_package test_tf2
-  ignore_package geometry2
-  ignore_package eigen_conversions
-  ignore_package kdl_conversions
-  ignore_package tf_conversions
-  ignore_package geometry
 
   # Packages not needed for the Talker/Listener demo (extra deps: lz4, bzip2, ...).
   ignore_package rosbag

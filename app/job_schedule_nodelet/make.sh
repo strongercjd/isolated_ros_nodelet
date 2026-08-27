@@ -84,12 +84,7 @@ cmd_install() {
       "class": "job_schedule_nodelet::JobNodelet",
       "library": "libjob_schedule_nodelet.so",
       "enabled": true,
-      "remap": {
-        "/job_node/cmd": "/job_node/cmd",
-        "/job_node/fastbuild_cmd": "/fastbuild_task/cmd",
-        "/job_node/task_state": "/fastbuild_task/state",
-        "/job_node/task_result": "/task/TaskResult"
-      },
+      "remap": {},
       "args": []
     }
 EOF

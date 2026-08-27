@@ -25,7 +25,7 @@ tool/
 ## 共同约定
 
 - 都只依赖仓库根目录 `./custom_mini.sh build` 编出的**隔离 ROS 环境**（`custom_mini_install/`）。
-- 工具**允许用 apt 安装**系统组件（如 FLTK），但必须在各自 README 里说明。
+- 工具**允许用 apt 安装**系统组件（如 SDL2），但必须在各自 README 里说明。
 - 编译 / 安装产物在 `tool/<工具>/build/`、`tool/<工具>/install/`，已加入 `.gitignore`。
 - 新增工具：在 `tool/` 下新建一个自包含目录，把上面的工具列表加一行即可。
 
