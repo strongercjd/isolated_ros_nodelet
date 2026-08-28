@@ -330,7 +330,7 @@ setup_python() {
     log "extract libpython${PYVER}-dev headers into install/"
     (
       cd "${debdir}"
-      rm -rf extracted
+      rm -rf extracted libpython${PYVER}-dev_*.deb
       apt-get download "libpython${PYVER}-dev"
       dpkg-deb -x libpython${PYVER}-dev_*.deb extracted
     )

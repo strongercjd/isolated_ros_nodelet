@@ -40,3 +40,12 @@ __pycache__/
 # --- tool 工具编译产物 ---
 tool/*/build/
 tool/*/install/
+
+# --- 第三方源码树里每次构建自动下载/重新生成（勿提交） ---
+src/python_dev/
+src/eigen3_dev/
+src/boost/boost_1_71_0/bin.v2/
+src/boost/boost_1_71_0/b2
+src/boost/boost_1_71_0/project-config.jam
+src/boost/boost_1_71_0/tools/build/src/engine/b2
+src/boost/boost_1_71_0.tar.gz
