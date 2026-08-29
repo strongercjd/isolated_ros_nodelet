@@ -219,10 +219,8 @@ fetch_github() {
   fail "unable to fetch ${org}/${repo} (tried: $*)"
 }
 
-# 给指定 catkin 包目录放 CATKIN_IGNORE，跳过 rosbag 等 demo 不需要的包。
-# 在 src/ 里找 <name>...</name> 的 package.xml（跳过 boost/poco 等非 ROS 树）。
-# catkin 见到 CATKIN_IGNORE 就不会编这个包。
-ignore_package() {
+# 在 src/ 里按 package.xml 的 <name> 找 catkin 包目录（跳过 boost/poco 等非 ROS 树）。
+find_catkin_pkg() {
   local name="$1"
   local pkgxml
   pkgxml="$(find "${SRC}" \
@@ -232,9 +230,28 @@ ignore_package() {
     | while read -r f; do
         grep -q "<name>${name}</name>" "${f}" && echo "${f}" && break
       done)"
-  if [[ -n "${pkgxml}" ]]; then
-    touch "$(dirname "${pkgxml}")/CATKIN_IGNORE"
-    log "CATKIN_IGNORE ${name} ($(dirname "${pkgxml}"))"
+  [[ -n "${pkgxml}" ]] && dirname "${pkgxml}" || true
+}
+
+# 给指定 catkin 包目录放 CATKIN_IGNORE，跳过 demo 不需要的包。
+# catkin 见到 CATKIN_IGNORE 就不会编这个包。
+ignore_package() {
+  local dir
+  dir="$(find_catkin_pkg "$1")"
+  if [[ -n "${dir}" ]]; then
+    touch "${dir}/CATKIN_IGNORE"
+    log "CATKIN_IGNORE $1 (${dir})"
+  fi
+}
+
+# 删掉 ignore_package 落下的 CATKIN_IGNORE。历史构建在 src/ 里留过这些文件，
+# 只去掉脚本里的 ignore_package 调用，catkin 仍然不会重新发现这些包。
+unignore_package() {
+  local dir
+  dir="$(find_catkin_pkg "$1")"
+  if [[ -n "${dir}" && -f "${dir}/CATKIN_IGNORE" ]]; then
+    rm -f "${dir}/CATKIN_IGNORE"
+    log "removed CATKIN_IGNORE $1 (${dir})"
   fi
 }
 
@@ -282,13 +299,15 @@ cmake_build_install() {
 # sitecustomize.py / imp.py 拷进 PY_SITE：解释器启动会自动加载（PYTHONPATH 已含 PY_SITE）。
 # empy 必须 3.3.4：4.x API 变了，catkin 用不了。
 # setuptools 69 自带 distutils，给 Python 3.12 上的 rosclean / roslaunch 用。
+# pycryptodomex / python-gnupg：rosbag 顶层硬 import（Cryptodome、gnupg），
+# rostopic 启动即 import rosbag，缺了这两个包 rostopic 整个不可用。
 setup_python() {
   mkdir -p "${PY_SITE}"
   cp -f "${PY_COMPAT}/sitecustomize.py" "${PY_SITE}/sitecustomize.py"
   cp -f "${PY_COMPAT}/imp.py" "${PY_SITE}/imp.py"
   export PIP_BREAK_SYSTEM_PACKAGES=1
   # 以本 install 前缀为准，避免 official_full 已装过导致本目录跳过。
-  if [[ -d "${PY_SITE}/catkin_pkg" ]] && PYTHONPATH="${PY_COMPAT}:${PY_SITE}" python3 -c "import catkin_pkg, em, yaml, rospkg" >/dev/null 2>&1; then
+  if [[ -d "${PY_SITE}/catkin_pkg" ]] && PYTHONPATH="${PY_COMPAT}:${PY_SITE}" python3 -c "import catkin_pkg, em, yaml, rospkg, Cryptodome, gnupg" >/dev/null 2>&1; then
     log "skip python pip deps (already in ${PY_SITE})"
   else
     local getpip="${LOG_DIR}/get-pip.py"
@@ -312,8 +331,10 @@ setup_python() {
       "defusedxml" \
       "distro" \
       "python-dateutil" \
-      "docutils"
-    python3 -c "import catkin_pkg, em, yaml, rospkg" \
+      "docutils" \
+      "pycryptodomex" \
+      "python-gnupg"
+    python3 -c "import catkin_pkg, em, yaml, rospkg, Cryptodome, gnupg" \
       || fail "python deps still missing after pip install"
   fi
   if [[ -d "${PY_SITE}/bin" ]]; then
@@ -366,6 +387,77 @@ setup_eigen() {
   mkdir -p "${INSTALL}/share"
   cp -a "${debdir}/extracted/usr/share/eigen3/cmake" "${INSTALL}/share/eigen3/cmake" 2>/dev/null || true
   [[ -f "${INSTALL}/include/eigen3/Eigen/Core" ]] || fail "eigen headers missing after extract"
+}
+
+# lz4 / bzip2 开发文件：rosbag_storage（BZip2 REQUIRED）与 roslz4（lz4.h + liblz4）
+# 要用。与 python-dev / eigen 同套路：只 download + dpkg-deb -x，不 apt install。
+# dev 包里的 liblz4.so / libbz2.so 是指向运行库的断链，必须连 liblz4-1 / libbz2-1.0
+# 一起解到同一目录，整串 .so* 拷进 install/lib 才能既可链接又可运行。
+#
+# 离线支持：优先使用 src/compress_dev/ 下已有的 .deb 包，没有时才 apt-get download。
+setup_compress_dev() {
+  if [[ -f "${INSTALL}/include/lz4.h" && -f "${INSTALL}/include/bzlib.h" ]]; then
+    log "skip lz4/bzip2 dev files (already at ${INSTALL}/include)"
+    return 0
+  fi
+  local debdir="${SRC}/compress_dev"
+  mkdir -p "${debdir}"
+  log "extract lz4 / bzip2 dev files into install/"
+  (
+    cd "${debdir}"
+    rm -rf extracted
+    # 检查 .deb 是否存在，不存在则下载
+    if [[ ! -f liblz4-dev_*.deb || ! -f liblz4-1_*.deb || ! -f libbz2-dev_*.deb || ! -f libbz2-1.0_*.deb ]]; then
+      log "downloading lz4/bzip2 .deb packages"
+      apt-get download liblz4-dev liblz4-1 libbz2-dev libbz2-1.0
+    fi
+    for deb in liblz4-dev_*.deb liblz4-1_*.deb libbz2-dev_*.deb libbz2-1.0_*.deb; do
+      dpkg-deb -x "${deb}" extracted
+    done
+  )
+  cp -a "${debdir}/extracted/usr/include/." "${INSTALL}/include/"
+  mkdir -p "${INSTALL}/lib"
+  cp -a "${debdir}"/extracted/usr/lib/*/liblz4.so* "${debdir}"/extracted/usr/lib/*/libbz2.so* \
+    "${INSTALL}/lib/" 2>/dev/null || true
+  [[ -f "${INSTALL}/include/lz4.h" ]] || fail "lz4 headers missing after extract"
+  [[ -f "${INSTALL}/include/bzlib.h" ]] || fail "bzip2 headers missing after extract"
+  [[ -e "${INSTALL}/lib/liblz4.so" ]] || fail "liblz4.so missing after extract"
+  [[ -e "${INSTALL}/lib/libbz2.so" ]] || fail "libbz2.so missing after extract"
+}
+
+# GPGME：rosbag_storage 的加密功能需要
+# 离线支持：优先使用 src/gpgme_dev/ 下已有的 .deb 包，没有时才 apt-get download。
+setup_gpgme() {
+  if [[ -f "${INSTALL}/.stamp_gpgme" ]]; then
+    log "skip GPGME (stamp exists)"
+    return 0
+  fi
+  local debdir="${SRC}/gpgme_dev"
+  mkdir -p "${debdir}"
+  log "extract GPGME dev files into install/"
+  (
+    cd "${debdir}"
+    rm -rf extracted
+    # 检查 .deb 是否存在，不存在则下载
+    if [[ ! -f libgpgme-dev_*.deb || ! -f libgpg-error-dev_*.deb || ! -f libassuan-dev_*.deb || \
+          ! -f libgpgme11t64_*.deb || ! -f libgpg-error0_*.deb || ! -f libassuan0_*.deb ]]; then
+      log "downloading GPGME .deb packages"
+      apt-get download libgpgme-dev libgpg-error-dev libassuan-dev libgpgme11t64 libgpg-error0 libassuan0
+    fi
+    for deb in libgpgme-dev_*.deb libgpg-error-dev_*.deb libassuan-dev_*.deb libgpgme11t64_*.deb libgpg-error0_*.deb libassuan0_*.deb; do
+      dpkg-deb -x "${deb}" extracted
+    done
+  )
+  # 头文件：包含架构相关的目录（gpg-error.h 在 x86_64-linux-gnu 下）
+  cp -a "${debdir}/extracted/usr/include/." "${INSTALL}/include/"
+  cp -a "${debdir}/extracted/usr/include/x86_64-linux-gnu/." "${INSTALL}/include/"
+  mkdir -p "${INSTALL}/lib"
+  cp -a "${debdir}"/extracted/usr/lib/*/libgpgme.so* "${debdir}"/extracted/usr/lib/*/libgpg-error.so* "${debdir}"/extracted/usr/lib/*/libassuan.so* \
+    "${INSTALL}/lib/"
+  [[ -f "${INSTALL}/include/gpgme.h" ]] || fail "gpgme.h missing after extract"
+  [[ -f "${INSTALL}/include/gpg-error.h" ]] || fail "gpg-error.h missing after extract"
+  [[ -e "${INSTALL}/lib/libgpgme.so" ]] || fail "libgpgme.so missing after extract"
+  touch "${INSTALL}/.stamp_gpgme"
 }
 
 # ---------------------------------------------------------------------------
@@ -472,7 +564,9 @@ build_boost() {
 # ---------------------------------------------------------------------------
 # 每个 fetch_github 后面的名字是「先试这个分支/标签，失败再试下一个」。
 # geneus / gennodejs 不在 github.com/ros 下，见 README 表格。
-# 拉完后给 demo 用不到的包打 CATKIN_IGNORE（rosbag 会拖 lz4/bzip2）。
+# rosbag 链路（rosbag / rosbag_storage / roslz4 / topic_tools）要编进来：
+# rostopic 启动即 import rosbag，缺了整个 rostopic 不可用。lz4 / bzip2
+# 开发文件由 setup_compress_dev 提供，Python 侧依赖由 setup_python 装。
 fetch_ros() {
   fetch_github ros catkin "${SRC}/catkin" noetic-devel
   fetch_github ros cmake_modules "${SRC}/cmake_modules" noetic-devel 0.5-devel kinetic-devel
@@ -499,11 +593,16 @@ fetch_ros() {
   # common_msgs：sensor_msgs / nav_msgs / geometry_msgs 等，应用层与 flat_sim 需要。
   fetch_github ros common_msgs "${SRC}/common_msgs" noetic-devel kinetic-devel
 
+  # 清理可能存在的旧 CATKIN_IGNORE（用户之前构建时留下的）
+  # rosbag 链路必须编进来：rostopic 启动需要 import rosbag
+  rm -f "${SRC}/ros_comm/tools/rosbag/CATKIN_IGNORE" \
+        "${SRC}/ros_comm/tools/rosbag_storage/CATKIN_IGNORE" \
+        "${SRC}/ros_comm/tools/roslz4/CATKIN_IGNORE" \
+        "${SRC}/ros_comm/tools/topic_tools/CATKIN_IGNORE" \
+        "${SRC}/ros_comm/utilities/roslz4/CATKIN_IGNORE" \
+        "${SRC}/ros_comm/utilities/roswtf/CATKIN_IGNORE" 2>/dev/null || true
+
   # Packages not needed for the Talker/Listener demo (extra deps: lz4, bzip2, ...).
-  ignore_package rosbag
-  ignore_package rosbag_storage
-  ignore_package roslz4
-  ignore_package topic_tools
   ignore_package roswtf
   ignore_package nodelet_topic_tools
   ignore_package test_nodelet
@@ -729,6 +828,8 @@ cmd_build() {
 
   run_logged 01_python setup_python
   run_logged 01b_eigen setup_eigen
+  run_logged 01c_compress setup_compress_dev
+  run_logged 01d_gpgme setup_gpgme
   run_logged 02_uuid build_uuid
   run_logged 03_boost build_boost
   run_logged 04_tinyxml2 build_tinyxml2
