@@ -11,6 +11,7 @@ find_package(roscpp REQUIRED)
 find_package(nodelet REQUIRED)
 find_package(pluginlib REQUIRED)
 find_package(geometry_msgs REQUIRED)
+find_package(nav_msgs REQUIRED)
 
 add_library(fastbuild_task_nodelet SHARED
   src/fastbuild_task_nodelet.cpp
@@ -22,12 +23,14 @@ target_include_directories(fastbuild_task_nodelet PRIVATE
   ${nodelet_INCLUDE_DIRS}
   ${pluginlib_INCLUDE_DIRS}
   ${geometry_msgs_INCLUDE_DIRS}
+  ${nav_msgs_INCLUDE_DIRS}
 )
 target_link_libraries(fastbuild_task_nodelet
   ${roscpp_LIBRARIES}
   ${nodelet_LIBRARIES}
   ${pluginlib_LIBRARIES}
   ${geometry_msgs_LIBRARIES}
+  ${nav_msgs_LIBRARIES}
 )
 
 install(TARGETS fastbuild_task_nodelet LIBRARY DESTINATION lib)

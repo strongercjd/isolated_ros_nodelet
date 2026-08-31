@@ -8,7 +8,7 @@
 #include <queue>
 #include <vector>
 
-namespace base_navi_nodelet
+namespace fastbuild_task_nodelet
 {
 
 // frontier 检测参数
@@ -208,4 +208,4 @@ inline bool lineReachable(const nav_msgs::OccupancyGrid &map, double x0, double 
     return true;
 }
 
-} // namespace base_navi_nodelet
+} // namespace fastbuild_task_nodelet

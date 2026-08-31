@@ -49,47 +49,26 @@ void BaseNaviNodelet::onInit()
     control_period_ = control_hz > 0.1 ? 1.0 / control_hz : 0.1; // 控制频率（Hz）
     pnh.param("v_max", v_max_, 0.25);
     pnh.param("w_max", w_max_, 0.8);
-    pnh.param("stop_count_limit", stop_count_limit_, 10);
-    pnh.param("occ_free_th", frontier_params_.occ_free_th, 25);
-    pnh.param("occ_occ_th", frontier_params_.occ_occ_th, 65);
-    pnh.param("robot_radius", robot_radius_, 0.15);
     pnh.param("goal_tolerance", goal_tolerance_, 0.25);
     pnh.param("stuck_target_time_s", stuck_target_time_s_, 30.0);
     pnh.param("state_period", state_period_, 1.0);
-    // 通行性窗口：覆盖机器人直径（至少 5x5）
-    const int pass_half = std::max(2, static_cast<int>(std::ceil(robot_radius_ / 0.05)));
-    frontier_params_.pass_half_window = pass_half;
 
-    map_sub_ = pnh.subscribe("/slam2d/map", 1, &BaseNaviNodelet::mapCallback, this);//接收地图
     pose_sub_ = pnh.subscribe("/slam2d/pose", 5, &BaseNaviNodelet::poseCallback, this);//接收机器人位姿
     scan_sub_ = pnh.subscribe("/mycar/base_scan", 5, &BaseNaviNodelet::scanCallback, this);//接收激光雷达数据
     odom_sub_ = pnh.subscribe("/mycar/odom", 10, &BaseNaviNodelet::odomCallback, this);//接收里程计数据
-    cmd_sub_ = pnh.subscribe("/base_navi/cmd", 5, &BaseNaviNodelet::cmdCallback, this);//接收导航指令
+    cmd_sub_ = pnh.subscribe("/base_navi/cmd", 5, &BaseNaviNodelet::cmdCallback, this);//接收导航指令（含 CMD_GOAL 目标点）
 
     vel_pub_ = pnh.advertise<geometry_msgs::Twist>("/mycar/cmd_vel", 5);
     state_pub_ = pnh.advertise<custom_msgs::NaviState>("/base_navi/state", 5);
     goal_pub_ = pnh.advertise<geometry_msgs::PoseStamped>("/base_navi/goal", 5);//发布目标点
 
     worker_ = std::thread(&BaseNaviNodelet::workerLoop, this);
-    NODELET_INFO("BaseNaviNodelet initialized: hz=%.0f v_max=%.2f w_max=%.2f stop_limit=%d "
-                 "occ_th=(%d,%d) pass_half=%d tol=%.2fm",
-                 1.0 / control_period_, v_max_, w_max_, stop_count_limit_,
-                 frontier_params_.occ_free_th, frontier_params_.occ_occ_th,
-                 frontier_params_.pass_half_window, goal_tolerance_);
+    NODELET_INFO("BaseNaviNodelet initialized: hz=%.0f v_max=%.2f w_max=%.2f tol=%.2fm "
+                 "goal_timeout=%.0fs",
+                 1.0 / control_period_, v_max_, w_max_, goal_tolerance_, stuck_target_time_s_);
 }
 
 // ---- 回调：只拷贝快照（manager spin 线程）----
-
-void BaseNaviNodelet::mapCallback(const nav_msgs::OccupancyGrid::ConstPtr &msg)
-{
-    {
-        std::lock_guard<std::mutex> lk(mtx_);
-        latest_map_ = *msg; // 4MB 拷贝 ≈ 1-2ms @1Hz
-        map_new_ = true;
-        ++map_count_;
-    }
-    cv_.notify_one();
-}
 
 void BaseNaviNodelet::poseCallback(const geometry_msgs::PoseStamped::ConstPtr &msg)
 {
@@ -121,7 +100,7 @@ void BaseNaviNodelet::cmdCallback(const custom_msgs::NaviCmd::ConstPtr &msg)
 {
     {
         std::lock_guard<std::mutex> lk(mtx_);
-        cmd_queue_.emplace_back(msg->cmd, msg->seq);
+        cmd_queue_.push_back(*msg);
     }
     cv_.notify_one();
 }
@@ -157,35 +136,27 @@ void BaseNaviNodelet::controlOnce()
     const ros::Time now = ros::Time::now();
 
     // 1. 命令队列
-    std::deque<std::pair<uint8_t, uint32_t>> cmds;
+    std::deque<custom_msgs::NaviCmd> cmds;
     {
         std::lock_guard<std::mutex> lk(mtx_);
-        cmds.swap(cmd_queue_);//交换命令队列
+        cmds.swap(cmd_queue_);
     }
     for (const auto &c : cmds)
-        handleCmd(c.first, c.second);
+        handleCmd(c);
 
     if (state_ == NaviRunState::IDLE)
-        return; // 未在任务中：不发布速度/状态
+        return; // 未使能：不发布速度/状态
 
     // 2. 快照
-    nav_msgs::OccupancyGrid map;
-    bool map_new = false;
     Pose2d pose, odom_pose;
     ros::Time pose_stamp;
     bool have_pose = false;
     {
         std::lock_guard<std::mutex> lk(mtx_);
-        if (map_new_)//有新地图
-        {
-            std::swap(map, latest_map_); // O(1)，回调侧下次重新赋值
-            map_new_ = false;
-            map_new = true;
-        }
         pose = pose_;
         odom_pose = odom_pose_;
         pose_stamp = pose_stamp_;
-        have_pose = !pose_stamp.isZero();//如果时间戳不为0，则表示有位姿
+        have_pose = !pose_stamp.isZero();
     }
 
     // 位姿降级：slam2d 位姿 >1s 未更新则退回 odom（SLAM 修正后 odom 系会偏，仅作兜底）
@@ -200,133 +171,126 @@ void BaseNaviNodelet::controlOnce()
         }
     }
 
-    // 3. 新地图：frontier 检测 + 目标维护 + 无目标计数（只随地图累计，1Hz）
-    if (map_new)
-    {
-        ++map_seen_;
-        explored_area_m2_ = freeAreaM2(map, frontier_params_.occ_free_th);
-        if (state_ == NaviRunState::RUNNING)
-        {
-            std::vector<FrontierGoal> goals = detectFrontiers(map, frontier_params_);
-            last_frontier_count_ = static_cast<uint32_t>(goals.size());
-            maintainTarget(map, goals, now);
-            if (has_target_)
-                no_target_count_ = 0;
-            else
-                // 对齐 explorestatestopcount：连续选不出可达目标即累计。
-                // 候选非空但全被拉黑同样属于"无可达目标"（否则机器人零速悬停到 watchdog）
-                ++no_target_count_;
-        }
-    }
-
-    // 4. 运动控制
+    // 3. 运动控制
     if (state_ == NaviRunState::RUNNING)
     {
         if (!have_pose)
         {
             publishZeroVel(); // 无位姿先不动
         }
-        else if (map_seen_ == 0)
+        else if (!has_target_)
         {
-            publishZeroVel(); // 开局等待地图（对齐原 WAITING 语义），不计失败
-            no_target_count_ = 0;
+            publishZeroVel(); // 已使能无目标：零速待命，等任务层 CMD_GOAL
         }
-        else if (has_target_)
+        else
         {
-            no_target_count_ = 0;
+            // 目标超时："看得见够不着"防御。拉黑决定权在任务层，这里只报 ABORT。
+            // 不依赖重选次数：目标一直持有时 picks 恒为 1，以首拣时间为准。
+            if ((now - target_first_pick_).toSec() > stuck_target_time_s_)
+            {
+                abortCurrentGoal(custom_msgs::NaviState::REASON_GOAL_LOST, "goal timeout");
+                publishZeroVel();
+                publishState(false);
+                return;
+            }
+
             const double dist = std::hypot(target_x_ - pose.x, target_y_ - pose.y);
             if (dist < goal_tolerance_)
             {
                 NODELET_INFO("target reached (%.2f, %.2f)", target_x_, target_y_);
                 has_target_ = false;
+                state_ = NaviRunState::REACHED;
                 publishZeroVel();
-            }
-            else
-            {
-                double v = 0.0, w = 0.0;
-                computeVelocity(pose, v, w);
-
-                // 顶死检测：持有目标且未到达，3s 内 odom 位移 < 1cm 即脱困。
-                // 不看 v 指令——避障硬停（v=0）时的贴墙摆动同样属于顶死。
-                if (stuck_check_time_.isZero())
-                {
-                    stuck_check_time_ = now;
-                    stuck_check_pose_ = odom_pose;
-                }
-                else if ((now - stuck_check_time_).toSec() > 3.0)
-                {
-                    const double moved = std::hypot(odom_pose.x - stuck_check_pose_.x,
-                                                    odom_pose.y - stuck_check_pose_.y);
-                    if (moved < 0.01)
-                    {
-                        ++stuck_count_;
-                        escape_until_ = now + ros::Duration(1.2); // 倒退+转向脱困
-                        hard_avoid_dir_ = 0;                       // 脱困后重判避障方向
-                        NODELET_WARN("stuck #%d (moved %.3fm in 3s), escaping", stuck_count_, moved);
-                        if (stuck_count_ >= 3 && has_target_)
-                        {
-                            blacklistTarget(target_x_, target_y_);
-                            has_target_ = false;
-                            stuck_count_ = 0;
-                        }
-                    }
-                    stuck_check_time_ = now;
-                    stuck_check_pose_ = odom_pose;
-                }
-
-                publishVelocity(v, w);
-            }
-        }
-        else
-        {
-            // 无目标：等待下一张地图重选；连续无可达候选到限即 FINISH
-            if (no_target_count_ > static_cast<uint32_t>(stop_count_limit_))
-            {
-                state_ = NaviRunState::FINISHED;
-                publishZeroVel();
-                publishZeroVel(); // 保持式 cmd_vel，双发兜底
-                NODELET_INFO("exploration FINISH: no reachable frontier for %u rounds, area=%.1f m2, "
-                             "cost=%.0f s",
-                             no_target_count_, explored_area_m2_, (now - start_time_).toSec());
                 publishState(true);
                 return;
             }
-            publishZeroVel();
+
+            double v = 0.0, w = 0.0;
+            computeVelocity(pose, v, w);
+
+            // 顶死检测：持有目标且未到达，3s 内 odom 位移 < 1cm 即脱困。
+            // 不看 v 指令——避障硬停（v=0）时的贴墙摆动同样属于顶死。
+            if (stuck_check_time_.isZero())
+            {
+                stuck_check_time_ = now;
+                stuck_check_pose_ = odom_pose;
+            }
+            else if ((now - stuck_check_time_).toSec() > 3.0)
+            {
+                const double moved = std::hypot(odom_pose.x - stuck_check_pose_.x,
+                                                odom_pose.y - stuck_check_pose_.y);
+                if (moved < 0.01)
+                {
+                    ++stuck_count_;
+                    escape_until_ = now + ros::Duration(1.2); // 倒退+转向脱困
+                    hard_avoid_dir_ = 0;                       // 脱困后重判避障方向
+                    NODELET_WARN("stuck #%d (moved %.3fm in 3s), escaping", stuck_count_, moved);
+                    if (stuck_count_ >= 3 && has_target_)
+                    {
+                        abortCurrentGoal(custom_msgs::NaviState::REASON_STUCK, "repeatedly stuck");
+                        publishZeroVel();
+                        publishState(false);
+                        return;
+                    }
+                }
+                stuck_check_time_ = now;
+                stuck_check_pose_ = odom_pose;
+            }
+
+            publishVelocity(v, w);
         }
     }
     else if (state_ == NaviRunState::PAUSED)
     {
         publishZeroVel();
     }
+    // REACHED / ABORTED：零速驻留待命（到达/放弃时已发过一次，心跳在下方补发）
 
-    // 5. 状态心跳
+    // 4. 状态心跳
     publishState(false);
 }
 
-void BaseNaviNodelet::handleCmd(uint8_t cmd, uint32_t seq)
+void BaseNaviNodelet::handleCmd(const custom_msgs::NaviCmd &msg)
 {
-    switch (cmd)
+    switch (msg.cmd)
     {
     case custom_msgs::NaviCmd::CMD_START:
         if (state_ == NaviRunState::RUNNING)
         {
-            NODELET_WARN("START(seq=%u) ignored: already running", seq);
+            NODELET_WARN("START(seq=%u) ignored: already running", msg.seq);
             return;
         }
         state_ = NaviRunState::RUNNING;
         has_target_ = false;
-        no_target_count_ = 0;
-        last_frontier_count_ = 0;
-        explored_area_m2_ = 0.0;
-        target_first_pick_ = ros::Time();
-        target_picks_ = 0;
-        blacklist_.clear();
         stuck_count_ = 0;
         stuck_check_time_ = ros::Time();
         escape_until_ = ros::Time();
         hard_avoid_dir_ = 0;
         start_time_ = ros::Time::now();
-        NODELET_INFO("exploration START (seq=%u)", seq);
+        NODELET_INFO("navi START (seq=%u), waiting for goal", msg.seq);
+        publishState(true);
+        break;
+    case custom_msgs::NaviCmd::CMD_GOAL:
+        // RUNNING/REACHED/ABORT 均接受：REACHED→接续下一目标，ABORT→换点重试。
+        // IDLE（未使能）/PAUSED（暂停语义）不接受，由任务层保证时序。
+        if (state_ != NaviRunState::RUNNING && state_ != NaviRunState::REACHED &&
+            state_ != NaviRunState::ABORTED)
+        {
+            NODELET_WARN("GOAL(seq=%u) ignored in state %d", msg.seq, static_cast<int>(state_));
+            return;
+        }
+        state_ = NaviRunState::RUNNING;
+        has_target_ = true;
+        target_x_ = msg.goal_x;
+        target_y_ = msg.goal_y;
+        if (msg.tolerance > 0.0)
+            goal_tolerance_ = msg.tolerance;
+        target_first_pick_ = ros::Time::now();
+        stuck_count_ = 0; // 换目标重置顶死计数
+        stuck_check_time_ = ros::Time();
+        NODELET_INFO("navi GOAL (seq=%u) -> (%.2f, %.2f) tol=%.2fm",
+                     msg.seq, target_x_, target_y_, goal_tolerance_);
+        publishGoal();
         publishState(true);
         break;
     case custom_msgs::NaviCmd::CMD_PAUSE:
@@ -334,14 +298,14 @@ void BaseNaviNodelet::handleCmd(uint8_t cmd, uint32_t seq)
             return;
         state_ = NaviRunState::PAUSED;
         publishZeroVel();
-        NODELET_INFO("exploration PAUSE (seq=%u)", seq);
+        NODELET_INFO("navi PAUSE (seq=%u)", msg.seq);
         publishState(true);
         break;
     case custom_msgs::NaviCmd::CMD_RESUME:
         if (state_ != NaviRunState::PAUSED)
             return;
         state_ = NaviRunState::RUNNING;
-        NODELET_INFO("exploration RESUME (seq=%u)", seq);
+        NODELET_INFO("navi RESUME (seq=%u)", msg.seq);
         publishState(true);
         break;
     case custom_msgs::NaviCmd::CMD_STOP:
@@ -349,87 +313,13 @@ void BaseNaviNodelet::handleCmd(uint8_t cmd, uint32_t seq)
         has_target_ = false;
         publishZeroVel();
         publishZeroVel();
-        NODELET_INFO("exploration STOP (seq=%u), robot parked in place", seq);
+        NODELET_INFO("navi STOP (seq=%u), robot parked in place (cost %.0fs)",
+                     msg.seq, (ros::Time::now() - start_time_).toSec());
         return;
     default:
-        NODELET_WARN("unknown NaviCmd %u (seq=%u)", cmd, seq);
+        NODELET_WARN("unknown NaviCmd %u (seq=%u)", msg.cmd, msg.seq);
         return;
     }
-}
-
-// 目标维护：失效判定 / 超时拉黑 / 重选（距离最近优先，同距簇大优先，直线可达优先）
-void BaseNaviNodelet::maintainTarget(const nav_msgs::OccupancyGrid &map,
-                                     const std::vector<FrontierGoal> &goals, const ros::Time &now)
-{
-    if (has_target_)
-    {
-        // 超时拉黑：持有同一目标长时间未到达即拉黑（"看得见够不着"防御）。
-        // 不依赖重选次数：目标一直持有时 picks 恒为 1，若以 picks 为条件将永不触发。
-        if ((now - target_first_pick_).toSec() > stuck_target_time_s_)
-        {
-            NODELET_WARN("target (%.2f, %.2f) unreachable for %.0fs (picks=%d), blacklisted",
-                         target_x_, target_y_, (now - target_first_pick_).toSec(), target_picks_);
-            blacklistTarget(target_x_, target_y_);
-            has_target_ = false;
-            return;
-        }
-        // 失效判定：候选簇里已找不到 1m 内的对应簇（簇消失/被并入占用区）
-        double nearest = 1e9;
-        for (const auto &g : goals)
-            nearest = std::min(nearest, std::hypot(g.wx - target_x_, g.wy - target_y_));
-        if (nearest > 1.0)
-        {
-            NODELET_INFO("target (%.2f, %.2f) vanished from frontier set", target_x_, target_y_);
-            has_target_ = false;
-        }
-        return; // 目标仍有效：保持方向惯性，不因新图换目标
-    }
-
-    // 重选：剔除拉黑区，最近优先；直线穿墙的候选重罚（+8m 虚拟距离），
-    // 避免选中墙对面目标后纯跟踪控制律一路顶死。全候选被挡时惩罚均摊，退化为旧行为
-    Pose2d pose;
-    {
-        std::lock_guard<std::mutex> lk(mtx_);
-        pose = pose_;
-    }
-    const FrontierGoal *best = nullptr;
-    double best_key = 1e9;
-    bool best_direct = false;
-    for (const auto &g : goals)
-    {
-        if (isBlacklisted(g.wx, g.wy))
-            continue;
-        const double dist = std::hypot(g.wx - pose.x, g.wy - pose.y);
-        const bool direct = lineReachable(map, pose.x, pose.y, g.wx, g.wy, frontier_params_);
-        double key = dist - g.size * 0.001; // 距离为主，簇大小做次级偏好
-        if (!direct)
-            key += 8.0;
-        if (key < best_key)
-        {
-            best_key = key;
-            best = &g;
-            best_direct = direct;
-        }
-    }
-    if (!best)
-        return;
-
-    const bool same = !target_first_pick_.isZero() &&
-                      std::hypot(best->wx - target_x_, best->wy - target_y_) < 1.0;
-    if (!same)
-    {
-        target_first_pick_ = now;
-        target_picks_ = 0;
-    }
-    target_x_ = best->wx;
-    target_y_ = best->wy;
-    ++target_picks_;
-    has_target_ = true;
-    NODELET_INFO("new target (%.2f, %.2f) size=%zu dist=%.1fm picks=%d via=%s",
-                 target_x_, target_y_, best->size,
-                 std::hypot(best->wx - pose.x, best->wy - pose.y), target_picks_,
-                 best_direct ? "line" : "detour");
-    publishGoal();
 }
 
 // 控制律：比例跟踪 + 扫描避障 + 脱困覆盖
@@ -554,6 +444,15 @@ void BaseNaviNodelet::publishZeroVel()
     publishVelocity(0.0, 0.0);
 }
 
+// 放弃当前目标：转 ABORTED 驻留，拉黑决定权在任务层（据 msg->target 拉黑后换点）
+void BaseNaviNodelet::abortCurrentGoal(uint8_t reason, const char *why)
+{
+    abort_reason_ = reason;
+    state_ = NaviRunState::ABORTED;
+    has_target_ = false;
+    stuck_count_ = 0;
+    NODELET_WARN("navi ABORT goal (%.2f, %.2f): %s", target_x_, target_y_, why);
+}
 
 /**
  * @brief 发布导航状态
@@ -571,14 +470,15 @@ void BaseNaviNodelet::publishState(bool force)
     case NaviRunState::RUNNING:
         msg.state = custom_msgs::NaviState::RUNNING;
         break;
-    case NaviRunState::FINISHED:
-        msg.state = custom_msgs::NaviState::FINISH;
+    case NaviRunState::REACHED:
+        msg.state = custom_msgs::NaviState::REACHED;
         break;
     case NaviRunState::PAUSED:
         msg.state = custom_msgs::NaviState::PAUSED;
         break;
     case NaviRunState::ABORTED:
         msg.state = custom_msgs::NaviState::ABORT;
+        msg.reason = abort_reason_;
         break;
     default:
         return; // IDLE 不上报
@@ -592,11 +492,11 @@ void BaseNaviNodelet::publishState(bool force)
     msg.pose_x = pose.x;
     msg.pose_y = pose.y;
     msg.pose_yaw = pose.yaw;
-    msg.target_x = has_target_ ? target_x_ : std::nanf("");
-    msg.target_y = has_target_ ? target_y_ : std::nanf("");
-    msg.frontier_count = last_frontier_count_;
-    msg.no_target_count = no_target_count_;
-    msg.explored_area_m2 = explored_area_m2_;
+    // REACHED/ABORT 驻留时上报刚处理完的目标（任务层据此匹配/拉黑）；仅 RUNNING 无目标时 NaN
+    const bool report_target = has_target_ || state_ == NaviRunState::REACHED ||
+                               state_ == NaviRunState::ABORTED;
+    msg.target_x = report_target ? target_x_ : std::nanf("");
+    msg.target_y = report_target ? target_y_ : std::nanf("");
     msg.stamp = now;
     state_pub_.publish(msg);
 }
@@ -610,21 +510,6 @@ void BaseNaviNodelet::publishGoal()
     msg.pose.position.y = target_y_;
     msg.pose.orientation.w = 1.0;
     goal_pub_.publish(msg);
-}
-
-void BaseNaviNodelet::blacklistTarget(double x, double y)
-{
-    blacklist_.emplace_back(x, y);
-    if (blacklist_.size() > 16)
-        blacklist_.erase(blacklist_.begin()); // 上限保护：淘汰最旧
-}
-
-bool BaseNaviNodelet::isBlacklisted(double x, double y) const
-{
-    for (const auto &b : blacklist_)
-        if (std::hypot(b.first - x, b.second - y) < 1.0)
-            return true;
-    return false;
 }
 
 } // namespace base_navi_nodelet
