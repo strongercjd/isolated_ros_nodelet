@@ -1,7 +1,3 @@
-// slam2d_nodelet：2D 激光 SLAM nodelet
-// 算法移植自 lidarslam_2d（odom 预测 + CSM 粗匹配 + ICP 精配准 + raycast 栅格建图）。
-// manager（custom_ros_nodelet）是 ros::spin() 单线程，因此本节点自带 worker 线程：
-// 回调只做配对+入队（µs 级），算法与发布都在 worker 线程执行。
 #pragma once
 
 #include <custom_ros_nodelet/custom_ros_nodelet.h>

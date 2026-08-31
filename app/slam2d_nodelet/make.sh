@@ -85,9 +85,7 @@ cmd_install() {
       "name": "/slam2d",
       "class": "slam2d_nodelet::Slam2dNodelet",
       "library": "libslam2d_nodelet.so",
-      "enabled": true,
-      "remap": { "scan": "/mycar/base_scan", "odom": "/mycar/odom", "reset": "/slam2d/reset" },
-      "args": []
+      "enabled": true
     }
 EOF
   fi

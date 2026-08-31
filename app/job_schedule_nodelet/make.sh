@@ -83,9 +83,7 @@ cmd_install() {
       "name": "/job_node",
       "class": "job_schedule_nodelet::JobNodelet",
       "library": "libjob_schedule_nodelet.so",
-      "enabled": true,
-      "remap": {},
-      "args": []
+      "enabled": true
     }
 EOF
   fi

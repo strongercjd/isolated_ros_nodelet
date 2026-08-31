@@ -92,13 +92,7 @@ OccupancyGrid 发布时做了行翻转（内部 GridMap row0 在 y 最大侧，�
   "name": "/slam2d",
   "class": "slam2d_nodelet::Slam2dNodelet",
   "library": "libslam2d_nodelet.so",
-  "enabled": true,
-  "remap": {
-    "/slam2d/scan": "/mycar/base_scan",
-    "/slam2d/odom": "/mycar/odom",
-    "/slam2d/reset": "/slam2d/reset"
-  },
-  "args": []
+  "enabled": true
 }
 ```
 

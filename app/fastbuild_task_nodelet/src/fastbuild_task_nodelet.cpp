@@ -2,16 +2,12 @@
 
 namespace fastbuild_task_nodelet
 {
-
 void FastbuildTaskNodelet::onInit()
 {
     ros::NodeHandle pnh = getPrivateNodeHandle();
 
     pnh.param("max_duration_s", max_duration_s_, 600.0);//600s 超时时间 ros参数
 
-    // 话题写死全局名（不再依赖 plugins.json remap）：cmd=/fastbuild_task/cmd,
-    //   navi_state=/base_navi/state, navi_cmd=/base_navi/cmd, cmd_vel=/mycar/cmd_vel,
-    //   state=/fastbuild_task/state
     cmd_sub_ = pnh.subscribe("/fastbuild_task/cmd", 5, &FastbuildTaskNodelet::taskCmdCallback, this);
     navi_state_sub_ = pnh.subscribe("/base_navi/state", 5, &FastbuildTaskNodelet::naviStateCallback, this);
 
@@ -19,10 +15,14 @@ void FastbuildTaskNodelet::onInit()
     vel_pub_ = pnh.advertise<geometry_msgs::Twist>("/mycar/cmd_vel", 5);
     state_pub_ = pnh.advertise<custom_msgs::TaskState>("/fastbuild_task/state", 5, true /*latch：迟订阅者也能拿到终态*/);
 
-    watchdog_ = pnh.createTimer(ros::Duration(5.0), &FastbuildTaskNodelet::watchdogTimer, this);
+    watchdog_ = pnh.createTimer(ros::Duration(5.0), &FastbuildTaskNodelet::watchdogTimer, this);//5s看门狗
     NODELET_INFO("FastbuildTaskNodelet initialized: max_duration_s=%.0f", max_duration_s_);
 }
 
+/**
+ * @brief 处理快建任务命令的回调函数 主要是启动和取消任务
+ * @param msg 接收到的快建命令消息指针
+ */
 void FastbuildTaskNodelet::taskCmdCallback(const custom_msgs::FastBuildCmd::ConstPtr &msg)
 {
     if (msg->cmd == custom_msgs::FastBuildCmd::CMD_START)
@@ -43,8 +43,8 @@ void FastbuildTaskNodelet::taskCmdCallback(const custom_msgs::FastBuildCmd::Cons
         latest_area_m2_ = 0.0;
         NODELET_INFO("task START (seq=%u type=%s map_type=%d from_charger=%d)", msg->seq,
                      msg->type.c_str(), msg->map_type, msg->start_from_charger ? 1 : 0);
-        publishTaskState(custom_msgs::TaskState::STATE_RUNNING, 255, 0.0, 0.0);
-        sendNaviCmd(custom_msgs::NaviCmd::CMD_START);
+        publishTaskState(custom_msgs::TaskState::STATE_RUNNING, 255, 0.0, 0.0);//发布快建任务状态
+        sendNaviCmd(custom_msgs::NaviCmd::CMD_START);//启动导航
     }
     else if (msg->cmd == custom_msgs::FastBuildCmd::CMD_CANCEL)
     {
@@ -53,14 +53,17 @@ void FastbuildTaskNodelet::taskCmdCallback(const custom_msgs::FastBuildCmd::Cons
             NODELET_WARN("CANCEL(seq=%u) ignored: task not running", msg->seq);
             return;
         }
-        finishTask(custom_msgs::TaskState::REASON_INTERRUPT, "cancelled by command");
+        finishTask(custom_msgs::TaskState::REASON_INTERRUPT, "cancelled by command");//取消任务
     }
     else
     {
         NODELET_WARN("unknown FastBuildCmd %u (seq=%u)", msg->cmd, msg->seq);
     }
 }
-
+/**
+ * @brief 处理导航状态消息的回调函数
+ * @param msg 接收到的导航状态消息指针
+ */
 void FastbuildTaskNodelet::naviStateCallback(const custom_msgs::NaviState::ConstPtr &msg)
 {
     latest_area_m2_ = msg->explored_area_m2; // 缓存最新面积，收尾上报用
@@ -72,7 +75,10 @@ void FastbuildTaskNodelet::naviStateCallback(const custom_msgs::NaviState::Const
         finishTask(custom_msgs::TaskState::REASON_FAIL, "navi reported ABORT");//
 }
 
-
+/**
+ * @brief 看门狗定时器回调函数，主要是检测任务是否超时
+ * @param event 定时器事件
+ */
 void FastbuildTaskNodelet::watchdogTimer(const ros::TimerEvent &)
 {
     if (state_ != TaskRunState::RUNNING)
@@ -90,13 +96,15 @@ void FastbuildTaskNodelet::finishTask(uint8_t reason, const char *why)
 
     sendNaviCmd(custom_msgs::NaviCmd::CMD_STOP);
     publishZeroVel(); // 停在原地：保持式 cmd_vel，双发兜底
-    publishZeroVel(); 
 
     publishTaskState(custom_msgs::TaskState::STATE_DONE, reason, latest_area_m2_, cost);
     NODELET_INFO("task DONE: reason=%u (%s) area=%.1f m2 cost=%.0f s", reason, why,
                  latest_area_m2_, cost);
 }
-
+/**
+ * @brief 发送导航命令
+ * @param cmd 导航命令
+ */
 void FastbuildTaskNodelet::sendNaviCmd(uint8_t cmd)
 {
     custom_msgs::NaviCmd msg;
@@ -105,7 +113,13 @@ void FastbuildTaskNodelet::sendNaviCmd(uint8_t cmd)
     msg.stamp = ros::Time::now();
     navi_cmd_pub_.publish(msg);
 }
-
+/**
+ * @brief 发布快建任务状态
+ * @param state 任务状态
+ * @param reason 任务结束原因
+ * @param area_m2 任务覆盖面积
+ * @param cost_time_s 任务耗时
+ */
 void FastbuildTaskNodelet::publishTaskState(uint8_t state, uint8_t reason,
                                             double area_m2, double cost_time_s)
 {

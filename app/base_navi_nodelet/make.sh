@@ -83,15 +83,7 @@ cmd_install() {
       "name": "/base_navi",
       "class": "base_navi_nodelet::BaseNaviNodelet",
       "library": "libbase_navi_nodelet.so",
-      "enabled": true,
-      "remap": {
-        "/base_navi/map": "/slam2d/map",
-        "/base_navi/pose": "/slam2d/pose",
-        "/base_navi/scan": "/mycar/base_scan",
-        "/base_navi/odom": "/mycar/odom",
-        "/base_navi/cmd_vel": "/mycar/cmd_vel"
-      },
-      "args": []
+      "enabled": true
     }
 EOF
   fi

@@ -1,9 +1,3 @@
-// slam2d 输入适配：odom/scan 配对 + LaserScan → 雷达系点云
-// 改编自 lidarslam_2d 的 unity::RosmsgReader：
-//  - flat_sim 的 odom 与 scan 同频同戳发布（RosBridge::publish 用同一 stamp），
-//    无需四元数插值对齐（slerp），也无需 tf（yaw 直接由四元数算出）；
-//  - 队列语义上移到 nodelet 层（回调线程 → worker 线程）。
-// 线程说明：pushOdom/makeFrame 均在 manager 的 ros::spin() 回调线程调用，无需加锁。
 #pragma once
 
 #include <nav_msgs/Odometry.h>

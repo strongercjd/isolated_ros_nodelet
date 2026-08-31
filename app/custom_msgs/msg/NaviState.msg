@@ -6,6 +6,7 @@ uint8 ENDING       = 2    # 收尾中（预留）
 uint8 PAUSED       = 3
 uint8 ABORT        = 4    # 内部错误/超时
 uint8 state
+
 float32 pose_x                # map 系当前位姿（=flat_sim 世界系）
 float32 pose_y
 float32 pose_yaw              # rad

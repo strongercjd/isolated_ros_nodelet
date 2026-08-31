@@ -10,6 +10,8 @@ uint8 REASON_FAIL      = 1
 uint8 REASON_INTERRUPT = 2   # 对齐 FASTBUILD_TASK_INTERRUPT（被取消）
 uint8 REASON_ERROR     = 3
 uint8 state
+
+
 uint8 finish_reason          # 仅 state==4 有效，其余填 255
 float32 area_m2              # 对齐 start_return_rsp.area（成功时）
 float32 cost_time_s          # 对齐 GetAreaTime().second

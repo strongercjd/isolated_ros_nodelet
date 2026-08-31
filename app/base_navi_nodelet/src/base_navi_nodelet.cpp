@@ -46,7 +46,7 @@ void BaseNaviNodelet::onInit()
 
     double control_hz = 10.0;
     pnh.param("control_hz", control_hz, 10.0);
-    control_period_ = control_hz > 0.1 ? 1.0 / control_hz : 0.1;
+    control_period_ = control_hz > 0.1 ? 1.0 / control_hz : 0.1; // 控制频率（Hz）
     pnh.param("v_max", v_max_, 0.25);
     pnh.param("w_max", w_max_, 0.8);
     pnh.param("stop_count_limit", stop_count_limit_, 10);
@@ -60,18 +60,15 @@ void BaseNaviNodelet::onInit()
     const int pass_half = std::max(2, static_cast<int>(std::ceil(robot_radius_ / 0.05)));
     frontier_params_.pass_half_window = pass_half;
 
-    // 话题写死全局名（不再依赖 plugins.json remap）：map=/slam2d/map, pose=/slam2d/pose,
-    //   scan=/mycar/base_scan, odom=/mycar/odom, cmd_vel=/mycar/cmd_vel；
-    //   cmd/state/goal 挂在 /base_navi 下
-    map_sub_ = pnh.subscribe("/slam2d/map", 1, &BaseNaviNodelet::mapCallback, this);
-    pose_sub_ = pnh.subscribe("/slam2d/pose", 5, &BaseNaviNodelet::poseCallback, this);
-    scan_sub_ = pnh.subscribe("/mycar/base_scan", 5, &BaseNaviNodelet::scanCallback, this);
-    odom_sub_ = pnh.subscribe("/mycar/odom", 10, &BaseNaviNodelet::odomCallback, this);
-    cmd_sub_ = pnh.subscribe("/base_navi/cmd", 5, &BaseNaviNodelet::cmdCallback, this);
+    map_sub_ = pnh.subscribe("/slam2d/map", 1, &BaseNaviNodelet::mapCallback, this);//接收地图
+    pose_sub_ = pnh.subscribe("/slam2d/pose", 5, &BaseNaviNodelet::poseCallback, this);//接收机器人位姿
+    scan_sub_ = pnh.subscribe("/mycar/base_scan", 5, &BaseNaviNodelet::scanCallback, this);//接收激光雷达数据
+    odom_sub_ = pnh.subscribe("/mycar/odom", 10, &BaseNaviNodelet::odomCallback, this);//接收里程计数据
+    cmd_sub_ = pnh.subscribe("/base_navi/cmd", 5, &BaseNaviNodelet::cmdCallback, this);//接收导航指令
 
     vel_pub_ = pnh.advertise<geometry_msgs::Twist>("/mycar/cmd_vel", 5);
     state_pub_ = pnh.advertise<custom_msgs::NaviState>("/base_navi/state", 5);
-    goal_pub_ = pnh.advertise<geometry_msgs::PoseStamped>("/base_navi/goal", 5);
+    goal_pub_ = pnh.advertise<geometry_msgs::PoseStamped>("/base_navi/goal", 5);//发布目标点
 
     worker_ = std::thread(&BaseNaviNodelet::workerLoop, this);
     NODELET_INFO("BaseNaviNodelet initialized: hz=%.0f v_max=%.2f w_max=%.2f stop_limit=%d "
@@ -152,7 +149,9 @@ void BaseNaviNodelet::workerLoop()
         }
     }
 }
-
+/**
+ * @brief 控制循环
+ */
 void BaseNaviNodelet::controlOnce()
 {
     const ros::Time now = ros::Time::now();
@@ -161,7 +160,7 @@ void BaseNaviNodelet::controlOnce()
     std::deque<std::pair<uint8_t, uint32_t>> cmds;
     {
         std::lock_guard<std::mutex> lk(mtx_);
-        cmds.swap(cmd_queue_);
+        cmds.swap(cmd_queue_);//交换命令队列
     }
     for (const auto &c : cmds)
         handleCmd(c.first, c.second);
@@ -177,7 +176,7 @@ void BaseNaviNodelet::controlOnce()
     bool have_pose = false;
     {
         std::lock_guard<std::mutex> lk(mtx_);
-        if (map_new_)
+        if (map_new_)//有新地图
         {
             std::swap(map, latest_map_); // O(1)，回调侧下次重新赋值
             map_new_ = false;
@@ -186,7 +185,7 @@ void BaseNaviNodelet::controlOnce()
         pose = pose_;
         odom_pose = odom_pose_;
         pose_stamp = pose_stamp_;
-        have_pose = !pose_stamp.isZero();
+        have_pose = !pose_stamp.isZero();//如果时间戳不为0，则表示有位姿
     }
 
     // 位姿降级：slam2d 位姿 >1s 未更新则退回 odom（SLAM 修正后 odom 系会偏，仅作兜底）
@@ -555,6 +554,10 @@ void BaseNaviNodelet::publishZeroVel()
     publishVelocity(0.0, 0.0);
 }
 
+
+/**
+ * @brief 发布导航状态
+ */
 void BaseNaviNodelet::publishState(bool force)
 {
     const ros::Time now = ros::Time::now();

@@ -16,49 +16,37 @@
       "name": "/heartbeat",
       "class": "heartbeat_nodelet::HeartbeatNodelet",
       "library": "libheartbeat_nodelet.so",
-      "enabled": true,
-      "remap": {},
-      "args": []
+      "enabled": true
     },
     {
       "name": "/listener",
       "class": "listener_nodelet::ListenerNodelet",
       "library": "liblistener_nodelet.so",
-      "enabled": true,
-      "remap": {},
-      "args": []
+      "enabled": true
     },
     {
       "name": "/slam2d",
       "class": "slam2d_nodelet::Slam2dNodelet",
       "library": "libslam2d_nodelet.so",
-      "enabled": true,
-      "remap": {},
-      "args": []
+      "enabled": true
     },
     {
       "name": "/base_navi",
       "class": "base_navi_nodelet::BaseNaviNodelet",
       "library": "libbase_navi_nodelet.so",
-      "enabled": true,
-      "remap": {},
-      "args": []
+      "enabled": true
     },
     {
       "name": "/fastbuild_task",
       "class": "fastbuild_task_nodelet::FastbuildTaskNodelet",
       "library": "libfastbuild_task_nodelet.so",
-      "enabled": true,
-      "remap": {},
-      "args": []
+      "enabled": true
     },
     {
       "name": "/job_node",
       "class": "job_schedule_nodelet::JobNodelet",
       "library": "libjob_schedule_nodelet.so",
-      "enabled": true,
-      "remap": {},
-      "args": []
+      "enabled": true
     }
   ]
 }

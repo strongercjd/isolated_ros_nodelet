@@ -21,7 +21,7 @@ namespace slam
 
     FrontEndProcess::FrontEndProcess(const unity::Rigid2f &init_pose)
         : frame_id_(-1),
-          global_map_(std::make_shared<unity::GridMap>(2000, 2000)), // 创建2000*2000的地图
+          global_map_(std::make_shared<unity::GridMap>(500, 500)), // 创建2000*2000的地图
           lastest_pose_(init_pose),                                  // SLAM 位姿初值（传首帧 odom 位姿可对齐世界系）
           last_pose_(init_pose),
           last_predict_pose_(init_pose)

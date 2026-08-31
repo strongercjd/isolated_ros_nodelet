@@ -83,9 +83,7 @@ cmd_install() {
       "name": "/fastbuild_task",
       "class": "fastbuild_task_nodelet::FastbuildTaskNodelet",
       "library": "libfastbuild_task_nodelet.so",
-      "enabled": true,
-      "remap": {},
-      "args": []
+      "enabled": true
     }
 EOF
   fi
