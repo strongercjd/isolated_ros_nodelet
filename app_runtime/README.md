@@ -26,7 +26,7 @@
 | `data/log/custom_ros_nodelet.log` | manager 与全部 nodelet 的运行日志 |
 
 `/slam2d` 插件输入 remap 到 flat_sim 话题（`/mycar/base_scan`、`/mycar/odom`），
-与 `./tool/flat_sim/run_flat_sim.sh` 联调：仿真器左半开车、右半实时看建图。
+与 `./tool/flat_sim/run_flat_sim.sh` 联调：仿真器开车，`./tool/flat_sim_viewer/run_viewer.sh` 实时看建图。
 
 ## 日志配置（plugins.json 顶层 "log" 字段）
 

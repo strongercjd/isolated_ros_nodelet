@@ -1,32 +1,32 @@
 #!/usr/bin/env bash
 # =============================================================================
-# tool/flat_sim/build.sh —— 独立编译 flat_sim（自研 2D 机器人仿真，C++ / CMake）
+# tool/flat_sim_viewer/build.sh —— 独立编译 flat_sim_viewer（SLAM 建图查看，Qt6）
 # -----------------------------------------------------------------------------
 # 与仓库 src/ 无关：只依赖「隔离 ROS 环境」（custom_mini_install，由仓库根目录
-# ./custom_mini.sh build 生成）。产物只写在本工具 build/ 与 install/。
+# ./custom_mini.sh build 生成）与系统 Qt6 / Boost。产物只写在本工具 build/ 与 install/。
+# prepare_env 与 tool/flat_sim/build.sh 保持同步（仓库约定：工具自包含）。
 #
 # 子命令（无参数 = build）：
 #   ./build.sh deps   检查并安装系统依赖（需要 sudo，见本工具 README.md）
 #   ./build.sh build  CMake 配置 → 编译 → 安装到 install/（默认）
-#   ./build.sh clean  删除 build/ 与 install/（保留源码 src/、worlds/、models/）
+#   ./build.sh clean  删除 build/ 与 install/（保留源码 src/）
 #   ./build.sh help   参数说明
 #
 # 产物：
-#   install/bin/flat_sim_node               可执行文件
-#   install/share/flat_sim/worlds|models/   示例世界与机器人模型
-#   build/                                  中间文件；日志 build/build.log
+#   install/bin/flat_sim_viewer            可执行文件
+#   build/                                 中间文件；日志 build/build.log
 #
-# 编完运行：./run_flat_sim.sh（GUI）或 ./run_flat_sim.sh --headless
+# 编完运行：./run_viewer.sh（需先 ./custom_mini.sh run 启动 rosmaster）
 # =============================================================================
 set -euo pipefail
 
-TOOL="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"   # .../tool/flat_sim
-REPO="$(dirname "$(dirname "${TOOL}")")"               # 仓库根（tool/flat_sim 上溯两级）
+TOOL="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"   # .../tool/flat_sim_viewer
+REPO="$(dirname "$(dirname "${TOOL}")")"               # 仓库根（tool/flat_sim_viewer 上溯两级）
 
 ROS_INSTALL="${REPO}/custom_mini_install"        # 隔离 ROS（custom_mini.sh build 生成）
 PREFIX="${TOOL}/install"
 BUILD="${TOOL}/build"
-BDIR="${BUILD}/sim"                              # CMake 构建目录
+BDIR="${BUILD}/viewer"                            # CMake 构建目录
 LOG="${BUILD}/build.log"
 
 JOBS="$(nproc 2>/dev/null || echo 4)"
@@ -34,10 +34,11 @@ JOBS="$(nproc 2>/dev/null || echo 4)"
 # -----------------------------------------------------------------------------
 # 小工具
 # -----------------------------------------------------------------------------
-log()  { echo "[flat_sim/build.sh] $*"; }
+log()  { echo "[flat_sim_viewer/build.sh] $*"; }
 fail() { echo "错误：$*" >&2; exit 1; }
 
-# 编译前注入隔离环境（ROS / Python 指向仓库内目录；Boost 用系统版本；不要用 sudo 跑 build）
+# 编译前注入隔离环境（ROS / Python 指向仓库内目录；Qt6 与 Boost 用系统版本；
+# 不要用 sudo 跑 build）
 prepare_env() {
   [[ -d "${ROS_INSTALL}" && -f "${ROS_INSTALL}/setup.bash" ]] \
     || fail "缺少隔离 ROS（${ROS_INSTALL}）。请先在仓库根目录执行 ./custom_mini.sh build"
@@ -56,12 +57,10 @@ prepare_env() {
   export PYTHONPATH="${REPO}/python_compat:${ROS_INSTALL}/lib/python${pyver}/site-packages:${ROS_INSTALL}/local/lib/python${pyver}/dist-packages:${ROS_INSTALL}/lib/python3/dist-packages:${ROS_INSTALL}/lib/python${pyver}/dist-packages${PYTHONPATH:+:${PYTHONPATH}}"
   export ROS_PYTHON_VERSION=3
   export PYTHONNOUSERSITE=1
-  # Boost 直接用系统版本（CMakeLists 里 find_package(Boost 1.83 ...) 会跳过
-  # 隔离 ROS 自带的 1.71；roscpp 运行时仍按自身 soname 加载隔离环境的 1.71）
 }
 
 # -----------------------------------------------------------------------------
-# deps：检查并安装系统依赖（headless 只需编译器；qt6-base-dev 仅供 GUI）
+# deps：检查并安装系统依赖
 # -----------------------------------------------------------------------------
 deps() {
   local pkgs=(
@@ -71,7 +70,7 @@ deps() {
     libboost-system-dev
     libboost-thread-dev
     libboost-chrono-dev
-    qt6-base-dev         # 2D GUI（Qt6 Widgets）；缺失时自动仅编 headless，不算错误
+    qt6-base-dev         # Qt6 Widgets（查看器必有 UI，必需）
     qt6-base-dev-tools   # moc 等（正常会随 qt6-base-dev 装入，显式写出便于缺包提示）
   )
   local miss=() p
@@ -104,7 +103,6 @@ do_build() {
   cmake -S "${TOOL}" -B "${BDIR}" \
     -DCMAKE_BUILD_TYPE=Release \
     -DCMAKE_INSTALL_PREFIX="${PREFIX}" \
-    -DFLAT_SIM_ENABLE_GUI=ON \
     -DCMAKE_INSTALL_RPATH="${ROS_INSTALL}/lib" \
     -DCMAKE_BUILD_WITH_INSTALL_RPATH=ON 2>&1 | tee "${LOG}"
 
@@ -114,17 +112,17 @@ do_build() {
   log "安装 -> ${PREFIX}"
   cmake --install "${BDIR}" 2>&1 | tee -a "${LOG}"
 
-  log "完成：${PREFIX}/bin/flat_sim_node"
-  log "运行：./tool/flat_sim/run_flat_sim.sh（或 --headless）"
+  log "完成：${PREFIX}/bin/flat_sim_viewer"
+  log "运行：./tool/flat_sim_viewer/run_viewer.sh（仿真器另见 ./tool/flat_sim/run_flat_sim.sh）"
 }
 
 clean() {
   rm -rf "${BUILD}" "${PREFIX}"
-  log "已删除 build/ 与 install/（源码 src/、worlds/、models/ 保留）"
+  log "已删除 build/ 与 install/（源码 src/ 保留）"
 }
 
 help() {
-  sed -n '2,20p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+  sed -n '2,22p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
 }
 
 cmd="${1:-build}"

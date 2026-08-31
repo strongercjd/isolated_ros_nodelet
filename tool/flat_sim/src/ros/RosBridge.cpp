@@ -30,6 +30,12 @@ RosBridge::RosBridge(Simulator& sim, bool useSimTime) : sim_(sim), nh_(), useSim
 
   heartbeatSub_ = nh_.subscribe<std_msgs::Empty>(
       "/heartbeat", 10, &RosBridge::onHeartbeat, this);
+  slamResetPub_ = nh_.advertise<std_msgs::Empty>("/slam2d/reset", 1);
+}
+
+void RosBridge::publishSlamReset() {
+  std_msgs::Empty msg;
+  slamResetPub_.publish(msg);
 }
 
 void RosBridge::onHeartbeat(const std_msgs::Empty::ConstPtr&) {

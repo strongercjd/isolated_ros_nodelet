@@ -23,6 +23,8 @@
 #   ./run_flat_sim.sh --headless   无界面（适合 CI / 无显示器环境）
 #   ./run_flat_sim.sh --gui        显式 GUI（等同默认）
 #   ./run_flat_sim.sh -h|--help    参数说明
+#
+# SLAM 建图视图已拆分至独立查看工具：tool/flat_sim_viewer/run_viewer.sh
 # =============================================================================
 set -uo pipefail
 
@@ -44,6 +46,7 @@ usage() {
 
 前置：请先在另一终端执行 ./custom_mini.sh run（启动 ROS 环境）。
 本脚本不启动 rosmaster / app_runtime。
+SLAM 建图视图：另见 tool/flat_sim_viewer/run_viewer.sh（独立查看工具）
 USAGE
 }
 

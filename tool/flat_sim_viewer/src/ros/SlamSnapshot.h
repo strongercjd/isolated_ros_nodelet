@@ -1,6 +1,8 @@
-// flat_sim —— SLAM 可视化数据快照（纯标准库类型，无 ROS 依赖）
+// flat_sim_viewer —— SLAM 可视化数据快照（纯标准库类型，无 ROS 依赖）
 //
-// gui 层（SlamView/Gui）只 include 本头文件，保持"gui 不依赖 ROS"的分层；
+// 拷贝自 tool/flat_sim/src/ros/SlamSnapshot.h（2026-08 版，拆分时迁出），
+// 仅改命名空间；两处保持同步修改。
+// view 层（SlamView）只 include 本头文件，保持"view 不依赖 ROS"的分层；
 // ros 层（SlamListener）在回调里填充，地图经 shared_ptr 共享（4MB 免拷贝）。
 #pragma once
 
@@ -8,7 +10,7 @@
 #include <memory>
 #include <vector>
 
-namespace flat_sim {
+namespace flat_sim_viewer {
 
 struct SlamSnapshot {
   // 占用栅格地图（对应 nav_msgs/OccupancyGrid 的拷贝，值 0-100，50=未观测）
@@ -19,7 +21,7 @@ struct SlamSnapshot {
     double resolution = 0.05;  // m / 格
     double originX = 0.0;      // 左下角世界坐标
     double originY = 0.0;
-    uint32_t seq = 0;  // 代数，每收到新地图 +1；SlamView 据此判断是否重填纹理
+    uint32_t seq = 0;  // 代数，每收到新地图 +1；SlamView 据此判断是否重填图像
   };
   Map map;
 
@@ -34,4 +36,4 @@ struct SlamSnapshot {
   double poseX = 0.0, poseY = 0.0, poseYaw = 0.0;
 };
 
-}  // namespace flat_sim
+}  // namespace flat_sim_viewer

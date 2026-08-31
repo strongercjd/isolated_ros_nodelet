@@ -77,8 +77,10 @@ runtime 说明见：
 
 ```bash
 ./custom_mini.sh build                  # 隔离 ROS 环境（首次，约 15–30 分钟）
-./tool/flat_sim/build.sh                # 编译 flat_sim（GUI 需要 SDL2；headless 不需要）
+./tool/flat_sim/build.sh                # 编译 flat_sim（GUI 需要 Qt6；headless 不需要）
 ./tool/flat_sim/run_flat_sim.sh         # 运行仿真（--headless 无界面）
+./tool/flat_sim_viewer/build.sh         # 编译 SLAM 建图查看器（Qt6）
+./tool/flat_sim_viewer/run_viewer.sh    # 实时查看 SLAM 建图
 ```
 
 工具总览见 [tool/README.md](tool/README.md)。
@@ -101,7 +103,8 @@ isolated_ros_nodelet/
 ├── src/                     # ROS / 第三方源码（libuuid 等）
 ├── tool/                    # 工具集（每个工具自包含子目录；总览见 tool/README.md）
 │   ├── flat_sim/            # 自研 2D 仿真（见 tool/flat_sim/README.md）
-│   └── flat_sim_teleop/     # 键盘遥控（见 tool/flat_sim_teleop/README.md）
+│   ├── flat_sim_teleop/     # 键盘遥控（见 tool/flat_sim_teleop/README.md）
+│   └── flat_sim_viewer/     # SLAM 建图查看（见 tool/flat_sim_viewer/README.md）
 ├── official_full_{install,build,runtime,logs}/
 ├── custom_mini_{install,build,runtime,logs}/
 └── app_runtime/             # 应用产物（各 make.sh install）

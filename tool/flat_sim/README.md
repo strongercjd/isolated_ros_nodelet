@@ -3,10 +3,9 @@
 flat_sim 是仓库自研的**轻量 2D 仿真工具**：加载自研格式的世界/机器人文件，
 做差速运动 + 激光射线仿真，并对接 ROS 话题。
 
-GUI 为**左右分屏**：左半 2D 俯视仿真视图；右半 SLAM 建图视图（订阅
-`app/slam2d_nodelet` 发布的 `/slam2d/*` 话题实时渲染，无 rosmaster 或 SLAM
-未运行时仅显示网格占位），显示内容与参考工程 lidarslam_2d 的画布一致：
-灰度占用地图、5 m 网格线、红色 input_cloud、蓝色 mapping_cloud、蓝色位姿箭头。
+GUI 为 Qt6 单窗口 2D 俯视仿真视图（世界边界、障碍、机器人、激光射线），
+支持 `--headless` 无窗口运行。**SLAM 建图视图已拆分至独立工具
+`tool/flat_sim_viewer`**（订阅 `/slam2d/*` 实时渲染占用地图、点云与位姿箭头）。
 
 - 世界文件：**自研 `.fworld`**（缩进块 + `#` 备注）
 - 机器人：**自研 `.frobot`**（形状 + 传感器挂载；**无 URDF**）
@@ -26,9 +25,9 @@ tool/flat_sim/
 ├── src/
 │   ├── core/            世界模型、差速运动、激光射线、碰撞（不依赖 ROS/GUI）
 │   ├── format/          .fworld / .frobot 解析（# 备注在解析层丢弃）
-│   ├── gui/             SDL2 2D 俯视图 + SLAM 建图视图（可选，headless 构建不链 SDL）
-│   └── ros/             话题桥接（odom / base_scan / cmd_vel / heartbeat，无 TF）
-│                        + SlamListener（订阅 /slam2d/* 供右半视图）
+│   ├── gui/             Qt6 2D 俯视图 SimView + 控制器 SimApp（可选，headless 构建不链 Qt）
+│   └── ros/             话题桥接（odom / base_scan / cmd_vel / heartbeat / slam2d/reset，
+│                        无 TF）+ SimRunner（固定步长单步与 ROS 延迟初始化）
 ├── models/              示例机器人模型（.frobot）
 ├── worlds/              示例世界（.fworld）
 ├── build/               编译中间目录 + build.log（build.sh 生成，已 gitignore）
@@ -44,7 +43,9 @@ tool/flat_sim/
 |----|------|
 | `build-essential` | g++ / make |
 | `cmake` | 构建系统 |
-| `libsdl2-dev` | 2D GUI（仅 GUI 需要；**headless 不需要，也不需要显示器**） |
+| `qt6-base-dev` | Qt6 Widgets GUI（仅 GUI 需要；**headless 不需要，也不需要显示器**） |
+| `qt6-base-dev-tools` | moc 等（随 qt6-base-dev 装入） |
+| `libboost{,-system,-thread,-chrono}-dev` | Boost（系统版本 ≥ 1.83；roscpp 其余部分走隔离 ROS） |
 
 `./build.sh deps` 会检测缺失并用 sudo 安装。
 
@@ -86,7 +87,6 @@ tool/flat_sim/
 | 发布 | `/mycar/base_scan` | `sensor_msgs/LaserScan` | 2D 激光（第 2 个激光起 `base_scan_2`…） |
 | 订阅 | `/mycar/cmd_vel` | `geometry_msgs/Twist` | `linear.x` 线速度 m/s、`angular.z` 角速度 rad/s |
 | 订阅 | `/heartbeat` | `std_msgs/Empty` | 控制节点心跳（`heartbeat_nodelet` 每 100ms）；首次收到后启用看门狗 |
-| 订阅 | `/slam2d/map` 等 | OccupancyGrid / PointCloud2 / PoseStamped | SLAM 视图数据（右半分屏渲染用） |
 | 发布 | `/slam2d/reset` | `std_msgs/Empty` | GUI 按 `r` 复位机器人时联动复位 SLAM |
 
 - **心跳看门狗**：首次收到 `/heartbeat` 后，若连续 **500ms** 未再收到，视为控制节点停止，
@@ -167,10 +167,9 @@ robot_file: "../models/mycar.frobot"
 flat_sim_node --world <文件.fworld> [--gui | --headless] [-h]
 ```
 
-- `--gui`（默认）：打开 2D 窗口（默认 1600×680，左右分屏）。按键：
-  `ESC`/`q` 退出、`l` 开关激光显示、`r` 复位机器人并同步发 `/slam2d/reset`、
-  `v` 恢复 SLAM 视图跟随；右半视图滚轮缩放（锚定光标）、左键拖拽平移
-  （拖拽即脱离跟随，`v` 恢复）；关窗即退出。
+- `--gui`（默认）：打开 Qt6 2D 俯视窗口（默认约 880×660，随窗口大小自适应）。
+  按键：`ESC`/`q` 退出、`l` 开关激光显示、`r` 复位机器人并同步发 `/slam2d/reset`；
+  关窗即退出。SLAM 建图查看另见 `tool/flat_sim_viewer`。
 - `--headless`：不创建窗口，仿真与话题照常（无显示器环境必选）。
 - 世界文件缺失 / 格式错误 → 打印 `文件:行号` 并退出码非 0。
 - 未检测到 rosmaster 时仅本地仿真运行并告警，master 出现后自动挂话题（无需重启）。
@@ -178,8 +177,8 @@ flat_sim_node --world <文件.fworld> [--gui | --headless] [-h]
 ## 构建选项
 
 `CMakeLists.txt` 的 `option(FLAT_SIM_ENABLE_GUI ...)`（默认 ON）：
-找到 SDL2 才编 GUI；找不到自动退化为纯 headless（`--gui` 将报错提示）。
-完全关闭：`cmake -DFLAT_SIM_ENABLE_GUI=OFF ...`（不链任何 SDL）。
+找到 Qt6（≥ 6.4）才编 GUI；找不到自动退化为纯 headless（`--gui` 将报错提示）。
+完全关闭：`cmake -DFLAT_SIM_ENABLE_GUI=OFF ...`（不链任何 Qt）。
 
 ## 常见问题
 
@@ -189,6 +188,6 @@ flat_sim_node --world <文件.fworld> [--gui | --headless] [-h]
 | `缺少 .../flat_sim_node` | 先 `./tool/flat_sim/build.sh` |
 | `GUI 初始化失败（无 DISPLAY）` | 用 `./run_flat_sim.sh --headless` |
 | 想用 `rostopic` 看话题 | 隔离环境没有 rosbag，Noetic 的 rostopic 启动即报错；请用 rospy 订阅（`run_flat_sim.sh` 内置验证即是） |
-| 右半视图一直黑屏只有网格 | rosmaster 正常但 SLAM 插件未跑：确认 `./app_runtime/run.sh` 已启动且日志有 `loaded /slam2d` |
+| 想看 SLAM 建图过程 | 用独立查看工具 `./tool/flat_sim_viewer/run_viewer.sh`（黑屏只有网格 = SLAM 插件未跑） |
 | `ROS 环境未启动（… 不可达）` | 先在另一终端执行 `./custom_mini.sh run`（或 `./custom_mini_runtime/run.sh`） |
 | 机器人一开始就动不了 | 初始位姿可能与障碍重叠（启动时有告警）；改 world 里 robot 的 `pose` |

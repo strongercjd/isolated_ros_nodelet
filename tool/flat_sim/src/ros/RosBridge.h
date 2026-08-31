@@ -2,6 +2,7 @@
 //
 //   发布：/<name>/odom       nav_msgs/Odometry
 //         /<name>/base_scan  sensor_msgs/LaserScan（第 2 个激光起 base_scan_2 ...）
+//         /slam2d/reset      std_msgs/Empty（GUI 按 r 复位机器人时联动）
 //   订阅：/<name>/cmd_vel    geometry_msgs/Twist
 //         /heartbeat         std_msgs/Empty（控制节点心跳；首次收到后启用看门狗）
 //
@@ -32,6 +33,8 @@ class RosBridge {
 
   // 每个仿真步调用一次（发布里程计与激光）
   void publish(double dt);
+  // 发布 /slam2d/reset（复位机器人时联动复位 SLAM，避免 odom 跳变打爆建图）
+  void publishSlamReset();
   // 心跳看门狗：应在 spinOnce 之后、step 之前调用
   void applyHeartbeatWatchdog();
   void spinOnce() { ros::spinOnce(); }
@@ -51,6 +54,7 @@ class RosBridge {
   ros::NodeHandle nh_;
   bool useSimTime_;
   std::vector<PerRobot> pubs_;
+  ros::Publisher slamResetPub_;
 
   ros::Subscriber heartbeatSub_;
   using Clock = std::chrono::steady_clock;

@@ -22,6 +22,7 @@ tool/
 |------|------|------|------|
 | [flat_sim](flat_sim/README.md) | 自研纯 2D 机器人仿真（.fworld/.frobot，无 TF / 无 URDF） | `./tool/flat_sim/build.sh` | `./tool/flat_sim/run_flat_sim.sh` |
 | [flat_sim_teleop](flat_sim_teleop/README.md) | flat_sim 键盘遥控（方向键发 `/cmd_vel`） | `./tool/flat_sim_teleop/build.sh` | `./tool/flat_sim_teleop/run_teleop.sh` |
+| [flat_sim_viewer](flat_sim_viewer/README.md) | SLAM 建图查看（Qt6，订阅 `/slam2d/*`） | `./tool/flat_sim_viewer/build.sh` | `./tool/flat_sim_viewer/run_viewer.sh` |
 
 ## 环境脚本：set_custom_ros_env.sh
 
@@ -51,7 +52,7 @@ source tool/set_custom_ros_env.sh
 ## 共同约定
 
 - 都只依赖仓库根目录 `./custom_mini.sh build` 编出的**隔离 ROS 环境**（`custom_mini_install/`）。
-- 工具**允许用 apt 安装**系统组件（如 SDL2），但必须在各自 README 里说明。
+- 工具**允许用 apt 安装**系统组件（如 Qt6），但必须在各自 README 里说明。
 - 编译 / 安装产物在 `tool/<工具>/build/`、`tool/<工具>/install/`，已加入 `.gitignore`。
 - 新增工具：在 `tool/` 下新建一个自包含目录，把上面的工具列表加一行即可。
 

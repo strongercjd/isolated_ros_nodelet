@@ -1,3 +1,4 @@
+// 拷贝自 tool/flat_sim/src/ros/SlamListener.cpp（2026-08 版），改动仅命名空间。
 #include "ros/SlamListener.h"
 
 #include <cmath>
@@ -8,9 +9,8 @@
 #include <geometry_msgs/PoseStamped.h>
 #include <nav_msgs/OccupancyGrid.h>
 #include <sensor_msgs/PointCloud2.h>
-#include <std_msgs/Empty.h>
 
-namespace flat_sim {
+namespace flat_sim_viewer {
 
 SlamListener::SlamListener() {
   // queue=1：可视化只要最新一帧；map 是 latch 话题，订阅建立时即收到最后一版
@@ -18,7 +18,6 @@ SlamListener::SlamListener() {
   inputSub_ = nh_.subscribe("/slam2d/input_cloud", 1, &SlamListener::cbInput, this);
   mappingSub_ = nh_.subscribe("/slam2d/mapping_cloud", 1, &SlamListener::cbMapping, this);
   poseSub_ = nh_.subscribe("/slam2d/pose", 1, &SlamListener::cbPose, this);
-  resetPub_ = nh_.advertise<std_msgs::Empty>("/slam2d/reset", 1);
 }
 
 SlamListener::~SlamListener() = default;
@@ -26,11 +25,6 @@ SlamListener::~SlamListener() = default;
 SlamSnapshot SlamListener::snapshot() const {
   std::lock_guard<std::mutex> lk(mtx_);
   return snap_;  // 地图 data 是 shared_ptr，深拷贝只有点云（几 KB）
-}
-
-void SlamListener::publishReset() {
-  std_msgs::Empty msg;
-  resetPub_.publish(msg);
 }
 
 // PointCloud2 → 平铺 x,y。按 fields 查 offset（发送端是本项目 slam2d，恒为 FLOAT32）。
@@ -71,7 +65,7 @@ void SlamListener::cbMap(const nav_msgs::OccupancyGrid::ConstPtr& msg) {
   snap_.map.resolution = msg->info.resolution;
   snap_.map.originX = msg->info.origin.position.x;
   snap_.map.originY = msg->info.origin.position.y;
-  ++snap_.map.seq;  // SlamView 据此判断是否重填纹理
+  ++snap_.map.seq;  // SlamView 据此判断是否重填图像
 }
 
 void SlamListener::cbInput(const sensor_msgs::PointCloud2::ConstPtr& msg) {
@@ -100,4 +94,4 @@ void SlamListener::cbPose(const geometry_msgs::PoseStamped::ConstPtr& msg) {
   snap_.poseYaw = yaw;
 }
 
-}  // namespace flat_sim
+}  // namespace flat_sim_viewer
