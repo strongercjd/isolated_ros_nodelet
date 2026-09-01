@@ -1,7 +1,7 @@
 # map_log_nodelet — SLAM 建图日志记录插件
 
 订阅 `slam2d_nodelet` 发布的建图话题，写入 rosbag（LZ4 压缩）日志，
-由机器人运动指令门控：**车动才记，车停即停**。日志供
+由机器人运动指令门控：**车动才记，车停暂停**（一次会话只写一个文件）。日志供
 `tool/flat_sim_viewer` 回放（数据源切换 → 打开 Bag…）。
 
 ## 话题
@@ -17,12 +17,23 @@
 ## 日志文件
 
 - 位置：`app_runtime/data/log/`（目录不存在自动创建）
-- 命名：`map_log_<YYYYmmdd_HHMMSS>_segNNN.bag`，时间戳为插件启动时刻，
-  `NNN` 段号在**每次门控重新打开时递增**——一次连续运动一段文件，不续写旧段
-- 门控打开瞬间补写四类话题的最近值（同一时间戳），回放第一帧即有完整画面
+- 命名：`map_log_<YYYYmmdd_HHMMSS>.bag`，时间戳为插件启动时刻
+- **一次会话只写一个文件**：静止仅暂停写入，重新运动续写同一文件，
+  进程退出时 close 落索引
+- 门控（重新）打开瞬间补写四类话题的最近值（同一时间戳），回放第一帧即有完整画面
 - bag 记录时间戳 = 写入时刻（非消息 `header.stamp`），保证时间轴严格单调
-- 段文件在 `kClose`（静止）或进程正常退出时 close 落索引；`kill -9`
-  会丢当前段索引，可用 `custom_mini_install/bin/rosbag reindex <file>` 修复
+- 优雅退出链路：Ctrl+C / SIGTERM → manager spin 返回 → nodelet 析构 →
+  排空落盘队列并 close bag（manager 已装 SIGTERM 处理，run.sh 停止时等待
+  最多 10s 落盘后才强杀）
+- `kill -9` 仍会丢文件索引，可用 `rosbag reindex <file>` 修复：
+  ```bash
+  source custom_mini_runtime/env.sh
+  export ROS_PACKAGE_PATH=$PWD/custom_mini_install/share
+  PYTHONPATH=$PWD/custom_mini_install/lib/python3/dist-packages \
+    ./custom_mini_install/bin/rosbag reindex <file.bag>
+  ```
+  （python 版 rosbag 若报缺 `gnupg`：`pip3 install --target <目录> python-gnupg`
+  并把该目录加进 PYTHONPATH）
 
 ## 日志目录解析（优先级）
 

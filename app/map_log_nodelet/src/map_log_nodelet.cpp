@@ -5,9 +5,7 @@
 #include <sys/types.h>
 #include <unistd.h>
 
-#include <cstdio>
 #include <ctime>
-#include <vector>
 
 namespace map_log_nodelet
 {
@@ -84,7 +82,7 @@ namespace map_log_nodelet
         pnh.param("queue_max", queue_max, static_cast<int>(queue_max_));
         queue_max_ = static_cast<size_t>(queue_max > 0 ? queue_max : 64);
 
-        // 会话时间戳（一次启动内恒定，用作所有段文件的公共前缀）
+        // 会话时间戳（一次启动内恒定，用作日志文件名后缀）
         {
             std::time_t t = std::time(nullptr);
             std::tm tm_buf;
@@ -147,11 +145,9 @@ namespace map_log_nodelet
         return "map_log";
     }
 
-    std::string MapLogNodelet::nextSegmentPath()
+    std::string MapLogNodelet::bagPath() const
     {
-        char seg[8];
-        std::snprintf(seg, sizeof(seg), "%03u", segment_++);
-        return log_dir_ + "/map_log_" + session_stamp_ + "_seg" + seg + ".bag";
+        return log_dir_ + "/map_log_" + session_stamp_ + ".bag";
     }
 
     // ---------------------------------------------------------------- 门控
@@ -168,21 +164,21 @@ namespace map_log_nodelet
     void MapLogNodelet::startRecording()
     {
         recording_ = true;
-        Item open;
-        open.kind = Item::kOpen;
-        open.stamp = ros::Time::now();
-        open.path = nextSegmentPath();
-        pushItem(std::move(open));
+        if (!opened_)
+        {
+            opened_ = true; // 一次会话只开一个文件，之后重开仅恢复写入
+            Item open;
+            open.kind = Item::kOpen;
+            open.stamp = ros::Time::now();
+            open.path = bagPath();
+            pushItem(std::move(open));
+        }
         enqueueLatestSnapshot(); // 回放第一帧即有完整地图+位姿+双点云
     }
 
     void MapLogNodelet::stopRecording()
     {
-        recording_ = false;
-        Item close;
-        close.kind = Item::kClose;
-        close.stamp = ros::Time::now();
-        pushItem(std::move(close));
+        recording_ = false; // 仅暂停写入；close 留到进程退出统一做
     }
 
     void MapLogNodelet::enqueueLatestSnapshot()
@@ -303,11 +299,11 @@ namespace map_log_nodelet
             std::lock_guard<std::mutex> lock(mtx_);
             if (queue_.size() >= queue_max_)
             {
-                // 丢最旧的数据项（kOpen/kClose 控制项不丢）
+                // 丢最旧的数据项（kOpen 控制项不丢）
                 bool dropped_old = false;
                 for (auto it = queue_.begin(); it != queue_.end(); ++it)
                 {
-                    if (it->kind != Item::kOpen && it->kind != Item::kClose)
+                    if (it->kind != Item::kOpen)
                     {
                         queue_.erase(it);
                         dropped_old = true;
@@ -375,12 +371,7 @@ namespace map_log_nodelet
                 switch (item.kind)
                 {
                 case Item::kOpen:
-                    if (bag_) // 防御：上一个段未正常关闭
-                        closeSegment();
                     openSegment(item.path);
-                    break;
-                case Item::kClose:
-                    closeSegment();
                     break;
                 case Item::kMap:
                     if (bag_)
@@ -403,7 +394,7 @@ namespace map_log_nodelet
             catch (const std::exception &e)
             {
                 NODELET_ERROR("bag write error: %s", e.what());
-                closeSegment(); // 写失败即收段，避免继续写坏
+                closeSegment(); // 写失败即关文件止血，避免继续写坏
             }
         }
         closeSegment(); // 正常退出路径：保证 bag 可读

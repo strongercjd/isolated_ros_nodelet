@@ -14,6 +14,7 @@
 #include <unistd.h>
 
 #include <cerrno>
+#include <csignal>
 #include <cstring>
 
 namespace
@@ -330,6 +331,12 @@ int main(int argc, char** argv)
   applyLogSpec(factory.logSpec(), factory.jsonDir(), argv);
 
   ros::init(argc, argv, factory.nodeName());
+
+  // SIGTERM 也走优雅退出：spin 返回 → 栈上 Loader 析构 → 各 nodelet 析构
+  //（map_log_nodelet 在析构里排空队列并 close bag 落索引）。roscpp 默认只
+  // 捕获 SIGINT，run.sh 的 cleanup 发的恰是 SIGTERM——不装则进程被默认
+  // 终止，析构不执行，bag 索引缺失无法回放。
+  ::signal(SIGTERM, [](int) { ros::shutdown(); });
 
   nodelet::Loader loader(boost::bind(&JsonPluginFactory::create, &factory, boost::placeholders::_1));
 

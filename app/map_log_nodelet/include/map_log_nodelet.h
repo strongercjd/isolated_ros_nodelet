@@ -26,9 +26,10 @@ namespace map_log_nodelet
  *        由 /mycar/cmd_vel 门控——速度非零即记录，全零即停。
  *
  * 门控状态机（仅回调线程）：
- *   IDLE      --cmd_vel 非零上升沿--> RECORDING：开新段文件 + 补写最近状态
- *   RECORDING --cmd_vel 全零下降沿--> IDLE    ：关闭段文件（落 chunk 索引）
- * 重新运动 = 开新段（map_log_<时间戳>_segNNN.bag），不续写旧段。
+ *   IDLE      --cmd_vel 非零上升沿--> RECORDING：首次开门 + 补写最近状态
+ *   RECORDING --cmd_vel 全零下降沿--> IDLE    ：暂停写入（不关文件）
+ * 一次会话只写一个文件（map_log_<时间戳>.bag）：静止仅暂停写入，
+ * 重新运动续写同一文件，进程退出时统一 close 落索引。
  *
  * 线程模型：manager 是单线程 spin，落盘在独立 worker 线程完成
  * （仿 slam2d_nodelet 的有界队列模式）；rosbag::Bag 仅 worker 线程触碰。
@@ -50,8 +51,8 @@ private:
     void mappingCloudCallback(const sensor_msgs::PointCloud2::ConstPtr &msg);
 
     // ---- 门控（仅回调线程调用）----
-    void startRecording();       // 入队 kOpen + 补写最近状态
-    void stopRecording();        // 入队 kClose
+    void startRecording();        // 首次开门 + 补写最近状态；重开只恢复写入
+    void stopRecording();         // 暂停写入（不关文件）
     void enqueueLatestSnapshot(); // 门控重开时补写 map/pose/双点云最近值
     static bool isMoving(const geometry_msgs::Twist &v)
     {
@@ -64,13 +65,12 @@ private:
     void openSegment(const std::string &path);
     void closeSegment();
 
-    // ---- 队列元素：控制命令与数据统一排序，保证 bag 时间戳单调 ----
+    // ---- 队列元素：开门命令与数据统一排序，保证 bag 时间戳单调 ----
     struct Item
     {
         enum Kind : uint8_t
         {
             kOpen,
-            kClose,
             kMap,
             kPose,
             kInput,
@@ -83,7 +83,7 @@ private:
         sensor_msgs::PointCloud2::ConstPtr input;   // kInput
         sensor_msgs::PointCloud2::ConstPtr mapping; // kMapping
     };
-    void pushItem(Item &&item); // 有界入队：满时丢最旧数据项（控制项不丢）
+    void pushItem(Item &&item); // 有界入队：满时丢最旧数据项（kOpen 不丢）
 
     // ---- 最近状态缓存（门控重开时补写；state_mtx_ 保护）----
     mutable std::mutex state_mtx_;
@@ -99,6 +99,7 @@ private:
     std::thread worker_;
     std::atomic_bool stop_{false};
     bool recording_ = false; // 门控状态，仅回调线程读写
+    bool opened_ = false;    // 已入队过 kOpen（一次会话只开一个文件），仅回调线程读写
     size_t dropped_ = 0;     // 队列满丢弃计数（诊断用）
     size_t queue_max_ = 64;  // ~queue_max
 
@@ -108,11 +109,10 @@ private:
     // 用 unique_ptr 把构造推迟到 openSegment 的 try/catch 内，环境缺失时
     // 降级为"记录不可用 + 错误日志"，不会导致 nodelet 加载失败拖垮 manager。
     std::unique_ptr<rosbag::Bag> bag_; // 仅 worker 线程触碰（Bag 非线程安全）
-    uint32_t segment_ = 0;             // 段号，回调线程递增（生成文件名用）
 
     // ---- 路径与参数 ----
-    std::string resolveLogDir() const;      // 参数 > dladdr > /proc/self/exe > CWD
-    std::string nextSegmentPath();          // <log_dir>/map_log_<会话戳>_segNNN.bag
+    std::string resolveLogDir() const; // 参数 > dladdr > /proc/self/exe > CWD
+    std::string bagPath() const;       // <log_dir>/map_log_<会话戳>.bag
     std::string log_dir_;
     std::string session_stamp_; // onInit 时刻，一次启动内恒定
 

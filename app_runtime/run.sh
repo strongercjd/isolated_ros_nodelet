@@ -82,13 +82,23 @@ echo "检测到 ROS Master 已就绪。"
 PIDS=()
 cleanup() {
   echo
-  echo "正在停止应用 ..."
+  echo "正在停止应用（等待 nodelet 排空队列并落盘 bag 索引）..."
   trap - INT TERM EXIT
   local pid
   for pid in "${PIDS[@]:-}"; do
     kill "${pid}" 2>/dev/null || true
   done
-  sleep 0.5
+  # 优雅退出需要时间：SIGTERM → manager spin 返回 → nodelet 析构（map_log
+  # 排空队列 + close 落索引，大文件可达秒级）。最多等 10s，仍存活才强杀。
+  local i alive
+  for i in $(seq 1 100); do
+    alive=0
+    for pid in "${PIDS[@]:-}"; do
+      if kill -0 "${pid}" 2>/dev/null; then alive=1; fi
+    done
+    if [[ "${alive}" -eq 0 ]]; then break; fi
+    sleep 0.1
+  done
   for pid in "${PIDS[@]:-}"; do
     kill -9 "${pid}" 2>/dev/null || true
   done
@@ -96,9 +106,9 @@ cleanup() {
 }
 trap cleanup INT TERM EXIT
 
-# 每次启动前删除上一轮日志（路径与 plugins.json 的 log.dir/log.file 对应）
-LOG_FILE="${HERE}/data/log/custom_ros_nodelet.log"
-rm -f "${LOG_FILE}"
+# 每次启动前删除上一轮全部日志（bag 录制 + manager 日志，路径与
+# plugins.json 的 log.dir/log.file 及 map_log_nodelet 的输出目录对应）
+rm -rf "${HERE}/data/log/"*
 
 echo "启动 custom_ros_nodelet ..."
 "${HERE}/bin/custom_ros_nodelet" "${HERE}/plugins.json" &
