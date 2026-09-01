@@ -47,8 +47,7 @@ QString formatTimeSec(double sec) {
 
 }  // namespace
 
-ViewerWindow::ViewerWindow(QWidget* parent, const std::string& initialBag)
-    : QMainWindow(parent) {
+ViewerWindow::ViewerWindow(QWidget* parent) : QMainWindow(parent) {
   setWindowTitle(QString::fromUtf8(
       "flat_sim_viewer — SLAM 建图查看（滚轮缩放 / 拖拽平移 / v 跟随 / ESC 退出）"));
   resize(900, 700);
@@ -103,11 +102,6 @@ ViewerWindow::ViewerWindow(QWidget* parent, const std::string& initialBag)
   connectTimer_->start();
   tickTimer_->start();
   updatePlayerBarState();
-
-  if (!initialBag.empty()) {
-    const std::string bag = initialBag;
-    QTimer::singleShot(0, this, [this, bag] { openBagFile(QString::fromStdString(bag)); });
-  }
 }
 
 ViewerWindow::~ViewerWindow() = default;

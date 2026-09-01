@@ -31,11 +31,11 @@ VIEWER_INSTALL="${TOOL}/install"
 
 usage() {
   cat <<USAGE
-用法: $0 [-h | --help] [--bag <file.bag>]
+用法: $0 [-h | --help]
 
-  （无参数）             启动 SLAM 建图查看器窗口（Qt6），实时订阅 /slam2d/*
-  --bag <file.bag>       启动后直接进入回放模式加载该日志
-                        （app_runtime/data/log/ 下 map_log_nodelet 录制的段文件）
+  （无参数）   启动 SLAM 建图查看器窗口（Qt6），默认实时订阅 /slam2d/*；
+               窗口底部可切换"回放"并选择日志（app_runtime/data/log/ 下的
+               map_log_*.bag，map_log_nodelet 录制）
 
 窗口按键: v 恢复视图跟随  |  空格 播放/暂停  |  ←/→ 单步帧  |  ESC / q 退出
 鼠标:     滚轮缩放（锚定光标）| 左键拖拽平移（脱离跟随）
@@ -46,13 +46,9 @@ master 未就绪时查看器以未连接状态启动，状态栏显示重试。
 USAGE
 }
 
-NODE_ARGS=()
 while [[ $# -gt 0 ]]; do
   case "$1" in
     -h|--help) usage; exit 0 ;;
-    --bag)
-      [[ $# -ge 2 ]] || { echo "--bag 需要一个文件参数" >&2; exit 1; }
-      NODE_ARGS+=("--bag" "$2"); shift 2 ;;
     *) echo "未知参数：$1（可用 -h 查看帮助）" >&2; usage >&2; exit 1 ;;
   esac
 done
@@ -128,7 +124,7 @@ cleanup() {
 }
 trap cleanup INT TERM EXIT
 
-echo "启动 flat_sim_viewer: ${NODE} ${NODE_ARGS[*]:-}"
-"${NODE}" "${NODE_ARGS[@]:-}" &
+echo "启动 flat_sim_viewer: ${NODE}"
+"${NODE}" &
 PIDS+=($!)
 wait

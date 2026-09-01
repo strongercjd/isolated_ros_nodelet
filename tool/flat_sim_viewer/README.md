@@ -72,9 +72,6 @@ tool/flat_sim_viewer/
 
 # 7. 启动查看器（终端 D）
 ./tool/flat_sim_viewer/run_viewer.sh
-
-# 回放本地日志（app/slam2d_nodelet 录制的建图过程，另见 app/map_log_nodelet）
-./tool/flat_sim_viewer/run_viewer.sh --bag app_runtime/data/log/map_log_*.bag
 ```
 
 ## 话题
@@ -103,8 +100,7 @@ tool/flat_sim_viewer/
 
 - **实时**（默认）：订阅 `/slam2d/*`，与旧版行为一致；此时回放控件全部隐藏
 - **回放**：自动弹出文件对话框（起始目录即 `app_runtime/data/log/`）选择日志
-  （`map_log_nodelet` 录制的 `map_log_*.bag`），或启动时 `--bag <file>` 直达。
-  **加载完成后自动开始播放**
+  （`map_log_nodelet` 录制的 `map_log_*.bag`）。**加载完成后自动开始播放**
 
 回放为完整播放器：
 

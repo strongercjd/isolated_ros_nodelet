@@ -15,7 +15,6 @@
 #pragma once
 
 #include <memory>
-#include <string>
 
 #include <QElapsedTimer>
 #include <QMainWindow>
@@ -37,9 +36,7 @@ class SlamView;
 class ViewerWindow : public QMainWindow {
   Q_OBJECT
  public:
-  // initialBag 非空：启动后直接进回放模式并加载该文件（--bag 参数）
-  explicit ViewerWindow(QWidget* parent = nullptr,
-                        const std::string& initialBag = std::string());
+  explicit ViewerWindow(QWidget* parent = nullptr);
   ~ViewerWindow() override;  // unique_ptr<SlamListener> 析构需要完整类型，定义在 cpp
 
  private Q_SLOTS:
