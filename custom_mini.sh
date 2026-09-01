@@ -460,6 +460,44 @@ setup_gpgme() {
   touch "${INSTALL}/.stamp_gpgme"
 }
 
+# OpenSSL 开发文件：rosbag_storage 的 aes_encryptor（openssl/rand.h + libcrypto）
+# 与 roslz4 无关，是 CMakeLists 里 find_library(CRYPTO_LIBRARY NAMES "crypto") 要用的。
+# 与 setup_compress_dev / setup_gpgme 同套路：只 download + dpkg-deb -x，不 apt install。
+# dev 包里的 libcrypto.so / libssl.so 是指向 libssl3t64 运行库的断链，必须连 libssl3t64
+# 一起解到同一目录，整串 .so* 拷进 install/lib 才能既可链接又可运行。
+#
+# 离线支持：优先使用 src/ssl_dev/ 下已有的 .deb 包，没有时才 apt-get download。
+setup_ssl_dev() {
+  if [[ -f "${INSTALL}/include/openssl/ssl.h" && -e "${INSTALL}/lib/libcrypto.so" ]]; then
+    log "skip OpenSSL dev files (already at ${INSTALL}/include)"
+    return 0
+  fi
+  local debdir="${SRC}/ssl_dev"
+  mkdir -p "${debdir}"
+  log "extract OpenSSL dev files into install/"
+  (
+    cd "${debdir}"
+    rm -rf extracted
+    # 检查 .deb 是否存在，不存在则下载
+    if [[ ! -f libssl-dev_*.deb || ! -f libssl3t64_*.deb ]]; then
+      log "downloading OpenSSL .deb packages"
+      apt-get download libssl-dev libssl3t64
+    fi
+    for deb in libssl-dev_*.deb libssl3t64_*.deb; do
+      dpkg-deb -x "${deb}" extracted
+    done
+  )
+  # 头文件：opensslconf.h / configuration.h 在 x86_64-linux-gnu/openssl 下，需整树并入 include/
+  cp -a "${debdir}/extracted/usr/include/." "${INSTALL}/include/"
+  cp -a "${debdir}/extracted/usr/include/x86_64-linux-gnu/." "${INSTALL}/include/" 2>/dev/null || true
+  mkdir -p "${INSTALL}/lib"
+  cp -a "${debdir}"/extracted/usr/lib/*/libcrypto.so* "${debdir}"/extracted/usr/lib/*/libssl.so* \
+    "${INSTALL}/lib/" 2>/dev/null || true
+  [[ -f "${INSTALL}/include/openssl/ssl.h" ]] || fail "openssl headers missing after extract"
+  [[ -e "${INSTALL}/lib/libcrypto.so" ]] || fail "libcrypto.so missing after extract"
+  [[ -e "${INSTALL}/lib/libssl.so" ]] || fail "libssl.so missing after extract"
+}
+
 # ---------------------------------------------------------------------------
 # 2) 第三方 C/C++ 库（源码 -> install/）
 # ---------------------------------------------------------------------------
@@ -830,6 +868,7 @@ cmd_build() {
   run_logged 01b_eigen setup_eigen
   run_logged 01c_compress setup_compress_dev
   run_logged 01d_gpgme setup_gpgme
+  run_logged 01e_ssl setup_ssl_dev
   run_logged 02_uuid build_uuid
   run_logged 03_boost build_boost
   run_logged 04_tinyxml2 build_tinyxml2
