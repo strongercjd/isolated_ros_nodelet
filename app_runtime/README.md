@@ -21,12 +21,16 @@
 | `lib/libheartbeat_nodelet.so` | 心跳（`app/heartbeat_nodelet`） |
 | `lib/liblistener_nodelet.so` | 接收端（`app/listener_nodelet`） |
 | `lib/libslam2d_nodelet.so` | 2D 激光 SLAM（`app/slam2d_nodelet`，详见其 README） |
+| `lib/libmap_log_nodelet.so` | 建图日志记录（`app/map_log_nodelet`，详见其 README） |
 | `plugins.json` | 插件列表 + 日志配置（见下） |
 | `run.sh` | 检测 ROS Master 后启动 manager |
 | `data/log/custom_ros_nodelet.log` | manager 与全部 nodelet 的运行日志 |
+| `data/log/map_log_*.bag` | 建图日志（map_log_nodelet 录制，viewer 可回放） |
 
 `/slam2d` 插件输入 remap 到 flat_sim 话题（`/mycar/base_scan`、`/mycar/odom`），
-与 `./tool/flat_sim/run_flat_sim.sh` 联调：仿真器开车，`./tool/flat_sim_viewer/run_viewer.sh` 实时看建图。
+与 `./tool/flat_sim/run_flat_sim.sh` 联调：仿真器开车，`./tool/flat_sim_viewer/run_viewer.sh` 实时看建图；
+开车过程被 `map_log_nodelet` 按 `/mycar/cmd_vel` 门控自动记录，事后
+`./tool/flat_sim_viewer/run_viewer.sh --bag <日志>` 回放。
 
 ## 日志配置（plugins.json 顶层 "log" 字段）
 

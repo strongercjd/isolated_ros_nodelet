@@ -31,11 +31,13 @@ VIEWER_INSTALL="${TOOL}/install"
 
 usage() {
   cat <<USAGE
-用法: $0 [-h | --help]
+用法: $0 [-h | --help] [--bag <file.bag>]
 
-  （无参数）   启动 SLAM 建图查看器窗口（Qt6）
+  （无参数）             启动 SLAM 建图查看器窗口（Qt6），实时订阅 /slam2d/*
+  --bag <file.bag>       启动后直接进入回放模式加载该日志
+                        （app_runtime/data/log/ 下 map_log_nodelet 录制的段文件）
 
-窗口按键: v 恢复视图跟随  |  ESC / q 退出
+窗口按键: v 恢复视图跟随  |  空格 播放/暂停  |  ←/→ 单步帧  |  ESC / q 退出
 鼠标:     滚轮缩放（锚定光标）| 左键拖拽平移（脱离跟随）
 
 前置：建议先在另一终端执行 ./custom_mini.sh run（启动 ROS 环境）。
@@ -44,9 +46,13 @@ master 未就绪时查看器以未连接状态启动，状态栏显示重试。
 USAGE
 }
 
+NODE_ARGS=()
 while [[ $# -gt 0 ]]; do
   case "$1" in
     -h|--help) usage; exit 0 ;;
+    --bag)
+      [[ $# -ge 2 ]] || { echo "--bag 需要一个文件参数" >&2; exit 1; }
+      NODE_ARGS+=("--bag" "$2"); shift 2 ;;
     *) echo "未知参数：$1（可用 -h 查看帮助）" >&2; usage >&2; exit 1 ;;
   esac
 done
@@ -69,6 +75,12 @@ fi
 
 # 本工具安装前缀（目前只有可执行文件；留 lib 路径兜底，便于以后拆动态库）。
 export LD_LIBRARY_PATH="${VIEWER_INSTALL}/lib:${LD_LIBRARY_PATH:-}"
+
+# rosbag 回放依赖 rospack 找到包（rosbag::Bag 构造即建 encryptor 的 pluginlib
+# ClassLoader，ROS_PACKAGE_PATH 缺失会抛异常）；package.xml 在 install/share。
+# 库解析另读 CMAKE_PREFIX_PATH（<prefix>/lib 下的加密插件库），一并挂上。
+export ROS_PACKAGE_PATH="${ROS_INSTALL}/share${ROS_PACKAGE_PATH:+:${ROS_PACKAGE_PATH}}"
+export CMAKE_PREFIX_PATH="${ROS_INSTALL}${CMAKE_PREFIX_PATH:+:${CMAKE_PREFIX_PATH}}"
 
 # 从 ROS_MASTER_URI 解析 host:port（默认 127.0.0.1:11311）
 parse_master() {
@@ -116,7 +128,7 @@ cleanup() {
 }
 trap cleanup INT TERM EXIT
 
-echo "启动 flat_sim_viewer: ${NODE}"
-"${NODE}" &
+echo "启动 flat_sim_viewer: ${NODE} ${NODE_ARGS[*]:-}"
+"${NODE}" "${NODE_ARGS[@]:-}" &
 PIDS+=($!)
 wait

@@ -47,6 +47,12 @@
       "class": "job_schedule_nodelet::JobNodelet",
       "library": "libjob_schedule_nodelet.so",
       "enabled": true
+    },
+    {
+      "name": "/map_log",
+      "class": "map_log_nodelet::MapLogNodelet",
+      "library": "libmap_log_nodelet.so",
+      "enabled": true
     }
   ]
 }

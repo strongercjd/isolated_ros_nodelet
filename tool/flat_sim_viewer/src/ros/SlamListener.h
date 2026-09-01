@@ -1,7 +1,8 @@
 // flat_sim_viewer —— SLAM 话题订阅端（纯被动，不发任何话题）
 //
 // 拷贝自 tool/flat_sim/src/ros/SlamListener.h（2026-08 版，拆分时迁出），
-// 改动：命名空间、删去 /slam2d/reset 发布（复位联动留在 flat_sim 侧）。
+// 改动：命名空间、删去 /slam2d/reset 发布（复位联动留在 flat_sim 侧）、
+//       消息填充逻辑抽出至 ros/SnapshotBuilder（与 BagPlayer 共用）。
 //
 //   订阅：/slam2d/map           nav_msgs/OccupancyGrid   （latch，1Hz 节流）
 //         /slam2d/input_cloud   sensor_msgs/PointCloud2   （红）
@@ -12,8 +13,8 @@
 // snapshot() 仍加锁交换，防未来把订阅挪到独立 spin 线程。
 #pragma once
 
+#include <cstdint>
 #include <mutex>
-#include <vector>
 
 #include <geometry_msgs/PoseStamped.h>
 #include <nav_msgs/OccupancyGrid.h>
@@ -33,9 +34,6 @@ class SlamListener {
   SlamSnapshot snapshot() const;
 
  private:
-  static bool parseCloud(const sensor_msgs::PointCloud2::ConstPtr& msg,
-                         std::vector<float>& xy);
-
   void cbMap(const nav_msgs::OccupancyGrid::ConstPtr& msg);
   void cbInput(const sensor_msgs::PointCloud2::ConstPtr& msg);
   void cbMapping(const sensor_msgs::PointCloud2::ConstPtr& msg);
@@ -43,6 +41,7 @@ class SlamListener {
 
   mutable std::mutex mtx_;
   SlamSnapshot snap_;
+  uint32_t mapSeq_ = 0;  // 实时源的地图代数（单调递增，传给 SnapshotBuilder）
 
   ros::NodeHandle nh_;
   ros::Subscriber mapSub_, inputSub_, mappingSub_, poseSub_;

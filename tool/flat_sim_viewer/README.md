@@ -22,12 +22,14 @@ flat_sim_viewer 是从 flat_sim 拆分出的**独立可视化工具**：订阅
 tool/flat_sim_viewer/
 ├── README.md            本文件
 ├── build.sh             编译脚本：deps / build / clean / help
-├── run_viewer.sh        运行脚本（master 不可达时仍启动，状态栏提示重试）
+├── run_viewer.sh        运行脚本（支持 --bag 直启回放）
 ├── CMakeLists.txt       顶层 CMake（由 build.sh 调用，一般不手敲 cmake）
 ├── src/
-│   ├── app/             ViewerWindow：主窗口 + 状态栏 + 定时器数据泵
+│   ├── app/             ViewerWindow：主窗口 + 播放条 + 状态栏 + 定时器数据泵
 │   ├── view/            SlamView：Qt6 自绘画布（视图数学自 flat_sim SDL 版迁移）
-│   └── ros/             SlamListener / SlamSnapshot（拷贝自 flat_sim，纯订阅）
+│   ├── replay/          BagPlayer：rosbag 回放引擎（无 Qt，轮询式）
+│   └── ros/             SlamListener（实时源）/ SlamSnapshot / SnapshotBuilder
+├── tests/               test_bagplayer：BagPlayer headless 回归测试（无 Qt）
 ├── build/               编译中间目录 + build.log（build.sh 生成，已 gitignore）
 └── install/             安装前缀（build.sh 生成，已 gitignore）
 ```
@@ -70,6 +72,9 @@ tool/flat_sim_viewer/
 
 # 7. 启动查看器（终端 D）
 ./tool/flat_sim_viewer/run_viewer.sh
+
+# 回放本地日志（app/slam2d_nodelet 录制的建图过程，另见 app/map_log_nodelet）
+./tool/flat_sim_viewer/run_viewer.sh --bag app_runtime/data/log/map_log_*.bag
 ```
 
 ## 话题
@@ -87,10 +92,32 @@ tool/flat_sim_viewer/
 
 | 标签 | 内容 |
 |------|------|
-| 连接 | `● 未连接 rosmaster（重试中）` / `● 已连接 · 等待 SLAM 数据` / `● 数据正常` |
+| 连接 | `● 未连接 rosmaster（重试中）` / `● 已连接 · 等待 SLAM 数据` / `● 数据正常` / `● 回放：<文件名>` |
 | 位姿 | `x=+0.09  y=+0.03  θ=+38.0°`（无数据时 `—` 占位） |
 | 地图 | `400×400 @0.05m  seq=121`（宽×高 @分辨率 代数） |
 | 视图 | `0.010 m/px · 跟随中` / `· 自由视图` |
+
+## 数据源：实时 / 回放
+
+窗口底部播放条左侧两个按钮切换数据源（渲染层共用，随时互切）：
+
+- **实时**（默认）：订阅 `/slam2d/*`，与旧版行为一致
+- **回放**：点击 `打开 Bag…` 选择日志文件（`map_log_nodelet` 录制的
+  `app_runtime/data/log/map_log_*.bag`），或启动时 `--bag <file>` 直达
+
+回放为完整播放器：
+
+| 控件/按键 | 效果 |
+|------|------|
+| `空格` / ▶ 按钮 | 播放 / 暂停（播到末尾自动暂停，再按从头重播） |
+| `→` / `←`（或 \|◀ ▶\| 按钮） | 单步进 / 退一帧（帧 = 一次 pose，对齐一次视觉变化） |
+| 进度条 | 拖动到任意时刻（松开生效，检查点重建，毫秒级） |
+| 倍速下拉 | 0.5× / 1× / 2× |
+| 右侧标签 | `mm:ss.s / mm:ss.s · 帧 k/N · 倍速` |
+
+回放模式下实时订阅被挂起（不 shutdown ROS）；切回实时时 latch 的地图
+即刻恢复显示。回放文件由运动门控分段（一段 = 一次连续运动），每段开头
+都补写了完整的地图/位姿/双点云快照，第一帧即有完整画面。
 
 ## 交互
 

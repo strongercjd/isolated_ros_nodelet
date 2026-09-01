@@ -51,6 +51,19 @@ master_up() {
 
 parse_master
 
+# rosbag 依赖 rospack 能找到包（rosbag::Bag 构造即建 encryptor 的 pluginlib
+# ClassLoader，ROS_PACKAGE_PATH 缺失会抛异常）。package.xml 在 custom_mini_install/share，
+# 可分发的 custom_mini_runtime 不含 share，故显式指向 install。
+ROS_INSTALL_DIR="$(cd "${HERE}/../custom_mini_install" 2>/dev/null && pwd)"
+if [[ -n "${ROS_INSTALL_DIR}" && -d "${ROS_INSTALL_DIR}/share" ]]; then
+  export ROS_PACKAGE_PATH="${ROS_INSTALL_DIR}/share${ROS_PACKAGE_PATH:+:${ROS_PACKAGE_PATH}}"
+fi
+# pluginlib 的库解析读 CMAKE_PREFIX_PATH（取 <prefix>/lib 逐个试探）；runtime 未随带
+# rosbag 的加密插件库（librosbag_default_encryption_plugins），把 install 前缀也挂上。
+if [[ -n "${ROS_INSTALL_DIR}" && -d "${ROS_INSTALL_DIR}/lib" ]]; then
+  export CMAKE_PREFIX_PATH="${ROS_INSTALL_DIR}${CMAKE_PREFIX_PATH:+:${CMAKE_PREFIX_PATH}}"
+fi
+
 echo "==== app_runtime ===="
 echo "HERE=${HERE}"
 echo "ROS_MASTER_URI=${ROS_MASTER_URI:-http://127.0.0.1:11311}"

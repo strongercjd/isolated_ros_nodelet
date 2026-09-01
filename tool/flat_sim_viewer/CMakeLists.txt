@@ -20,13 +20,15 @@ find_package(std_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(nav_msgs REQUIRED)
+find_package(rosbag REQUIRED)          # 回放：读 map_log_nodelet 录的 .bag
+find_package(rosbag_storage REQUIRED)
 
 # Boost 用系统版本（CMAKE_PREFIX_PATH 前置了隔离 ROS，那里也有 Boost 1.71 的
 # cmake config；带最低版本号 1.83 才能过滤掉它、命中系统 /usr 的 Boost）
 find_package(Boost 1.83 REQUIRED COMPONENTS system thread chrono)
 find_package(Threads REQUIRED)
 
-set(VIEWER_MSG_PKGS roscpp std_msgs geometry_msgs sensor_msgs nav_msgs)
+set(VIEWER_MSG_PKGS roscpp std_msgs geometry_msgs sensor_msgs nav_msgs rosbag rosbag_storage)
 set(VIEWER_ROS_INCLUDES)
 set(VIEWER_ROS_LIBS)
 foreach(_pkg ${VIEWER_MSG_PKGS})
@@ -37,8 +39,12 @@ endforeach()
 # 注意：catkin 的 Config.cmake 会把全局 BUILD_SHARED_LIBS 置 ON，
 # 这里显式 STATIC（与 tool/flat_sim 的做法一致）。
 
-# ---- ros：SlamListener（拷贝自 flat_sim，仅订阅 /slam2d/*）----
-add_library(flat_viewer_ros STATIC src/ros/SlamListener.cpp)
+# ---- ros：SlamListener（实时源）+ SnapshotBuilder（消息→快照，实时/回放共用）
+#      + replay/BagPlayer（rosbag 回放引擎）----
+add_library(flat_viewer_ros STATIC
+  src/ros/SlamListener.cpp
+  src/ros/SnapshotBuilder.cpp
+  src/replay/BagPlayer.cpp)
 target_include_directories(flat_viewer_ros PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src
   ${VIEWER_ROS_INCLUDES} ${Boost_INCLUDE_DIRS})
 target_link_libraries(flat_viewer_ros PUBLIC ${VIEWER_ROS_LIBS} ${Boost_LIBRARIES}
