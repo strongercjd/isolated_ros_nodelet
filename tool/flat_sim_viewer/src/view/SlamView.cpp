@@ -20,6 +20,11 @@ const QColor kMappingCloud(0, 0, 255);  // 配准后点云（蓝）
 const QColor kPoseArrow(0, 0, 255);     // 位姿箭头（蓝）
 const double kDefaultMPerPx = 0.01;     // cv_ui scalar：100 px/m
 const double kGridStep = 5.0;           // 网格间距（米）
+// fastbuild 决策覆盖层
+const QColor kCandidate(0, 220, 0);     // 候选点（绿，大小按簇）
+const QColor kCandidateVia(0, 160, 220); // 绕行候选（青，via=1 区分）
+const QColor kSelected(255, 220, 0);    // 最终选中点（黄）
+const QColor kBlacklist(180, 180, 180); // 拉黑点（灰叉）
 
 }  // namespace
 
@@ -85,17 +90,21 @@ void SlamView::paintEvent(QPaintEvent*) {
     p.drawLine(QPointF(0, sy(gy)), QPointF(width() - 1, sy(gy)));
 
   // ---- 点云：2×2 像素块（100 px/m 下约 2cm，与原画布观感一致）----
-  auto drawCloud = [&](const std::vector<float>& xy, const QColor& c) {
-    for (size_t i = 0; i + 1 < xy.size(); i += 2) {
-      const int s = (int)std::lround(sx(xy[i]));
-      const int t = (int)std::lround(sy(xy[i + 1]));
-      p.fillRect(QRect(s - 1, t - 1, 2, 2), c);
-    }
-  };
-  if (snap_.hasMapping) drawCloud(snap_.mappingXY, kMappingCloud);  // 蓝：配准后
-  if (snap_.hasInput) drawCloud(snap_.inputXY, kInputCloud);        // 红：配准前
+  // fastbuild 回放（showSlamDetails_==false）跳过：只留地图背景 + 位姿 + 决策标记
+  if (showSlamDetails_) {
+    auto drawCloud = [&](const std::vector<float>& xy, const QColor& c) {
+      for (size_t i = 0; i + 1 < xy.size(); i += 2) {
+        const int s = (int)std::lround(sx(xy[i]));
+        const int t = (int)std::lround(sy(xy[i + 1]));
+        p.fillRect(QRect(s - 1, t - 1, 2, 2), c);
+      }
+    };
+    if (snap_.hasMapping) drawCloud(snap_.mappingXY, kMappingCloud);  // 蓝：配准后
+    if (snap_.hasInput) drawCloud(snap_.inputXY, kInputCloud);        // 红：配准前
+  }
 
   // ---- 位姿箭头（蓝色，几何同原工程：L=0.15m，杆半宽 r/2=0.025m，头半宽 r=0.05m）----
+  // 三种模式都画：fastbuild 回放要看机器在哪里
   if (snap_.hasPose) {
     const double cosA = std::cos(snap_.poseYaw), sinA = std::sin(snap_.poseYaw);
     const double L = 0.15, r = 0.05;
@@ -110,6 +119,35 @@ void SlamView::paintEvent(QPaintEvent*) {
     p.setBrush(kPoseArrow);
     p.drawPolygon(shaft);
     p.drawPolygon(head);
+  }
+
+  // ---- fastbuild 决策覆盖层（候选绿/绕行青点，选中黄圈，拉黑灰叉）----
+  if (snap_.decision.has) {
+    const auto& d = snap_.decision;
+    // 拉黑点：灰色 ×（画在候选下层）
+    p.setPen(QPen(kBlacklist, 1));
+    for (const auto& b : d.blacklist) {
+      const int bx = (int)std::lround(sx(b.first)), by = (int)std::lround(sy(b.second));
+      p.drawLine(bx - 4, by - 4, bx + 4, by + 4);
+      p.drawLine(bx - 4, by + 4, bx + 4, by - 4);
+    }
+    // 候选点：实心圆，半径按簇大小 3 + 2√size，clamp ≤ 10px
+    for (const auto& c : d.candidates) {
+      const int r = std::min(10, 3 + (int)std::lround(2.0 * std::sqrt((double)c.size)));
+      p.setPen(Qt::NoPen);
+      p.setBrush(c.via ? kCandidateVia : kCandidate);
+      p.drawEllipse(QPointF(sx(c.x), sy(c.y)), r, r);
+    }
+    // 选中点：黄色实心圆 + 外圈
+    if (d.hasSelected) {
+      const QPointF c(sx(d.selX), sy(d.selY));
+      p.setPen(Qt::NoPen);
+      p.setBrush(kSelected);
+      p.drawEllipse(c, 6, 6);
+      p.setBrush(Qt::NoBrush);
+      p.setPen(QPen(kSelected, 2));
+      p.drawEllipse(c, 11, 11);
+    }
   }
 }
 

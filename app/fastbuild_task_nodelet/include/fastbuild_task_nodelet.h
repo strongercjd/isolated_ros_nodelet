@@ -3,6 +3,7 @@
 #include <custom_ros_nodelet/custom_ros_nodelet.h>
 
 #include <custom_msgs/FastBuildCmd.h>
+#include <custom_msgs/FastBuildDecision.h>
 #include <custom_msgs/NaviCmd.h>
 #include <custom_msgs/NaviState.h>
 #include <custom_msgs/TaskState.h>
@@ -47,6 +48,9 @@ private:
     void sendGoal(double x, double y);
     void publishTaskState(uint8_t state, uint8_t reason, double area_m2, double cost_time_s);
     void publishZeroVel();
+    // 发布一次决策（ROS 话题 + 落盘 custom_ros_nodelet.log 的 FASTBUILD_DECISION 行）
+    void publishDecision(const std::vector<FrontierGoal> &goals, bool has_selected,
+                         double sel_x, double sel_y, uint8_t task_state);
     void blacklistTarget(double x, double y);
     bool isBlacklisted(double x, double y) const;
 
@@ -80,7 +84,7 @@ private:
     std::vector<std::pair<double, double>> blacklist_; // 拉黑点（1m 邻域内不再选目标）
 
     ros::Subscriber cmd_sub_, navi_state_sub_, map_sub_, pose_sub_;
-    ros::Publisher navi_cmd_pub_, vel_pub_, state_pub_;
+    ros::Publisher navi_cmd_pub_, vel_pub_, state_pub_, decision_pub_;
     ros::Timer decision_timer_, watchdog_;
 };
 

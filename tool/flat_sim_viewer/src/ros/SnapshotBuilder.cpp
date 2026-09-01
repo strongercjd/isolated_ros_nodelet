@@ -62,5 +62,28 @@ void applyMappingCloud(SlamSnapshot& snap, const sensor_msgs::PointCloud2& msg) 
   if (!snap.hasMapping) snap.mappingXY.clear();
 }
 
+void applyDecision(SlamSnapshot& snap, const custom_msgs::FastBuildDecision& msg) {
+  auto& d = snap.decision;
+  d.has = true;
+  d.candidates.clear();
+  d.candidates.reserve(msg.candidates.size());
+  for (size_t i = 0; i < msg.candidates.size(); ++i) {
+    SlamSnapshot::DecisionOverlay::Cand c;
+    c.x = msg.candidates[i].x;
+    c.y = msg.candidates[i].y;
+    c.size = i < msg.candidate_size.size() ? msg.candidate_size[i] : 0;
+    c.via = i < msg.candidate_via.size() ? msg.candidate_via[i] : 0;
+    d.candidates.push_back(c);
+  }
+  d.hasSelected = msg.has_selected != 0;
+  d.selX = msg.selected_x;
+  d.selY = msg.selected_y;
+  d.blacklist.clear();
+  d.blacklist.reserve(msg.blacklist.size());
+  for (const auto& b : msg.blacklist) d.blacklist.emplace_back(b.x, b.y);
+  d.areaM2 = msg.area_m2;
+  d.taskState = msg.task_state;
+}
+
 }  // namespace snapshot_builder
 }  // namespace flat_sim_viewer

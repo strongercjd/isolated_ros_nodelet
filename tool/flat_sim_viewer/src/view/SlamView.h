@@ -28,6 +28,10 @@ class SlamView : public QWidget {
   // 存快照拷贝并触发重绘（ViewerWindow 的 tickTimer 每周期调用）
   void setSnapshot(const SlamSnapshot& snap);
 
+  // fastbuild 回放：仅隐藏点云（false 时），地图背景 + 位姿箭头 + 决策标记照常画
+  // —— 位姿不隐藏是为了看机器在哪里。切回实时/普通回放需恢复 true。
+  void setShowSlamDetails(bool on) { showSlamDetails_ = on; }
+
   // 状态栏文本："0.010 m/px · 跟随中"
   QString statusText() const;
 
@@ -60,6 +64,7 @@ class SlamView : public QWidget {
   bool follow_ = true;          // 跟随最新位姿；拖拽即脱离，v 恢复
   bool dragging_ = false;
   QPointF lastMouse_;
+  bool showSlamDetails_ = true;  // false=fastbuild 回放：隐藏点云与位姿箭头
 
   QImage mapImg_;         // 代数缓存的地图图像
   uint32_t mapSeq_ = 0;   // 已重建的地图代数；0 = 尚无

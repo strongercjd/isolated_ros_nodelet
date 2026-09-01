@@ -40,12 +40,18 @@ endforeach()
 # 这里显式 STATIC（与 tool/flat_sim 的做法一致）。
 
 # ---- ros：SlamListener（实时源）+ SnapshotBuilder（消息→快照，实时/回放共用）
-#      + replay/BagPlayer（rosbag 回放引擎）----
+#      + replay/BagPlayer（rosbag 回放引擎）
+#      + replay/DecisionLog + FastbuildPlayer（fastbuild 决策回放）
+# include 含 custom_msgs（../../app/common_include）与 third_party（nlohmann）----
 add_library(flat_viewer_ros STATIC
   src/ros/SlamListener.cpp
   src/ros/SnapshotBuilder.cpp
-  src/replay/BagPlayer.cpp)
+  src/replay/BagPlayer.cpp
+  src/replay/DecisionLog.cpp
+  src/replay/FastbuildPlayer.cpp)
 target_include_directories(flat_viewer_ros PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/third_party
+  ${CMAKE_CURRENT_SOURCE_DIR}/../../app/common_include
   ${VIEWER_ROS_INCLUDES} ${Boost_INCLUDE_DIRS})
 target_link_libraries(flat_viewer_ros PUBLIC ${VIEWER_ROS_LIBS} ${Boost_LIBRARIES}
                                              Threads::Threads)

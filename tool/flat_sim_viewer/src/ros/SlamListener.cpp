@@ -12,6 +12,7 @@ SlamListener::SlamListener() {
   inputSub_ = nh_.subscribe("/slam2d/input_cloud", 1, &SlamListener::cbInput, this);
   mappingSub_ = nh_.subscribe("/slam2d/mapping_cloud", 1, &SlamListener::cbMapping, this);
   poseSub_ = nh_.subscribe("/slam2d/pose", 1, &SlamListener::cbPose, this);
+  decisionSub_ = nh_.subscribe("/fastbuild_task/decision", 1, &SlamListener::cbDecision, this);
 }
 
 SlamListener::~SlamListener() = default;
@@ -39,6 +40,11 @@ void SlamListener::cbMapping(const sensor_msgs::PointCloud2::ConstPtr& msg) {
 void SlamListener::cbPose(const geometry_msgs::PoseStamped::ConstPtr& msg) {
   std::lock_guard<std::mutex> lk(mtx_);
   snapshot_builder::applyPose(snap_, *msg);
+}
+
+void SlamListener::cbDecision(const custom_msgs::FastBuildDecision::ConstPtr& msg) {
+  std::lock_guard<std::mutex> lk(mtx_);
+  snapshot_builder::applyDecision(snap_, *msg);
 }
 
 }  // namespace flat_sim_viewer

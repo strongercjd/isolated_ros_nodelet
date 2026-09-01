@@ -30,6 +30,7 @@
 #include <ros/ros.h>
 
 #include "replay/BagPlayer.h"
+#include "replay/FastbuildPlayer.h"
 #include "ros/SlamListener.h"
 #include "view/SlamView.h"
 
@@ -116,13 +117,16 @@ void ViewerWindow::buildPlayerBar() {
 
   btnLive_ = new QPushButton(QString::fromUtf8("实时"), playerBar_);
   btnReplay_ = new QPushButton(QString::fromUtf8("回放"), playerBar_);
+  btnFbReplay_ = new QPushButton(QString::fromUtf8("fastbuild回放"), playerBar_);
   btnLive_->setCheckable(true);
   btnReplay_->setCheckable(true);
+  btnFbReplay_->setCheckable(true);
   btnLive_->setChecked(true);
   auto* group = new QButtonGroup(playerBar_);  // 互斥，随 playerBar_ 释放
   group->setExclusive(true);
   group->addButton(btnLive_);
   group->addButton(btnReplay_);
+  group->addButton(btnFbReplay_);
   QObject::connect(btnLive_, &QAbstractButton::toggled, this, [this](bool on) {
     if (on) setSource(Source::Live);
   });
@@ -131,9 +135,27 @@ void ViewerWindow::buildPlayerBar() {
     setSource(Source::Replay);
     if (!(player_ && player_->isOpen())) onOpenBag();  // 切入回放默认选文件
   });
+  QObject::connect(btnFbReplay_, &QAbstractButton::toggled, this, [this](bool on) {
+    if (!on) return;
+    setSource(Source::FastbuildReplay);
+    if (!fb_) fb_ = std::make_unique<FastbuildPlayer>();
+    if (!fb_->decisionLoaded()) {
+      onOpenDecision();  // 决策日志没加载 → 先选日志（取消则停在提示态，可再点按钮）
+    } else if (!fb_->ready()) {
+      onOpenSlamBag();   // 有日志没背景 → 选 slam bag
+    } else {
+      frameClock_.start();
+      view_->setSnapshot(fb_->snapshot());
+      refreshReplayUi();
+    }
+  });
 
   btnOpen_ = new QPushButton(QString::fromUtf8("打开 Bag…"), playerBar_);
   QObject::connect(btnOpen_, &QAbstractButton::clicked, this, &ViewerWindow::onOpenBag);
+  btnOpenDecision_ = new QPushButton(QString::fromUtf8("打开决策日志…"), playerBar_);
+  QObject::connect(btnOpenDecision_, &QAbstractButton::clicked, this, &ViewerWindow::onOpenDecision);
+  btnOpenSlam_ = new QPushButton(QString::fromUtf8("打开 slam Bag…"), playerBar_);
+  QObject::connect(btnOpenSlam_, &QAbstractButton::clicked, this, &ViewerWindow::onOpenSlamBag);
 
   btnPrev_ = new QPushButton(QString::fromUtf8("|◀"), playerBar_);
   btnPlay_ = new QPushButton(QString::fromUtf8("▶"), playerBar_);
@@ -160,7 +182,10 @@ void ViewerWindow::buildPlayerBar() {
 
   h->addWidget(btnLive_);
   h->addWidget(btnReplay_);
+  h->addWidget(btnFbReplay_);
   h->addWidget(btnOpen_);
+  h->addWidget(btnOpenDecision_);
+  h->addWidget(btnOpenSlam_);
   h->addWidget(btnPrev_);
   h->addWidget(btnPlay_);
   h->addWidget(btnNext_);
@@ -172,21 +197,33 @@ void ViewerWindow::buildPlayerBar() {
 void ViewerWindow::setSource(Source m) {
   source_ = m;
   if (m == Source::Live && player_) player_->pause();
+  if (m == Source::FastbuildReplay) {
+    if (fb_) fb_->pause();
+    view_->setShowSlamDetails(false);  // fb 回放：隐藏点云，地图背景 + 位姿箭头照常
+  } else {
+    view_->setShowSlamDetails(true);
+  }
   updatePlayerBarState();
   refreshConnLabel(nullptr);
 }
 
 void ViewerWindow::updatePlayerBarState() {
-  // 实时模式隐藏全部回放控件（只留 实时|回放 切换）；回放模式显示，未加载时置灰
+  // 实时模式隐藏全部回放控件（只留 实时|回放|fastbuild回放 切换）；
+  // 回放模式按来源显示对应按钮，未加载时置灰。
   const bool replay = source_ == Source::Replay;
-  const bool ready = replay && player_ && player_->isOpen();
-  for (QWidget* w : {static_cast<QWidget*>(btnOpen_), static_cast<QWidget*>(btnPrev_),
-                     static_cast<QWidget*>(btnPlay_), static_cast<QWidget*>(btnNext_),
-                     static_cast<QWidget*>(seekSlider_), static_cast<QWidget*>(speedBox_),
-                     static_cast<QWidget*>(replayLabel_)}) {
-    w->setVisible(replay);
+  const bool fb = source_ == Source::FastbuildReplay;
+  const bool any = replay || fb;
+  const bool readyReplay = replay && player_ && player_->isOpen();
+  const bool readyFb = fb && fb_ && fb_->ready();
+  const bool ready = readyReplay || readyFb;
+  for (QWidget* w : {static_cast<QWidget*>(btnPrev_), static_cast<QWidget*>(btnPlay_),
+                     static_cast<QWidget*>(btnNext_), static_cast<QWidget*>(seekSlider_),
+                     static_cast<QWidget*>(speedBox_), static_cast<QWidget*>(replayLabel_)}) {
+    w->setVisible(any);
   }
-  btnOpen_->setEnabled(replay);
+  btnOpen_->setVisible(replay);          // 打开 Bag（slam 回放）
+  btnOpenDecision_->setVisible(fb);      // 打开决策日志（fb 回放）
+  btnOpenSlam_->setVisible(fb);          // 打开 slam Bag（fb 回放背景）
   btnPlay_->setEnabled(ready);
   btnPrev_->setEnabled(ready);
   btnNext_->setEnabled(ready);
@@ -243,26 +280,105 @@ void ViewerWindow::openBagFile(const QString& path) {
   refreshReplayUi();
 }
 
+void ViewerWindow::onOpenDecision() {
+  const QString path = QFileDialog::getOpenFileName(
+      this, QString::fromUtf8("打开 fastbuild 决策日志（custom_ros_nodelet.log）"),
+      defaultBagDir(), "日志 (*.log);;所有文件 (*)");
+  if (path.isEmpty()) return;
+  if (!fb_) fb_ = std::make_unique<FastbuildPlayer>();
+  QProgressDialog dlg(
+      QString::fromUtf8("正在解析决策日志 %1 …").arg(QFileInfo(path).fileName()),
+      QString(), 0, 1000, this);
+  dlg.setWindowModality(Qt::WindowModal);
+  dlg.setMinimumDuration(200);
+  const bool ok = fb_->openDecisionLog(path.toStdString(), [&dlg](double p) {
+    dlg.setValue((int)(p * 1000.0));
+    QCoreApplication::processEvents();
+  });
+  if (!ok) {
+    QMessageBox::warning(this, QString::fromUtf8("解析决策日志失败"),
+                         path + "\n" + QString::fromStdString(fb_->error()));
+    return;
+  }
+  refreshReplayUi();
+  if (!fb_->ready()) {
+    onOpenSlamBag();  // 有决策无背景：顺带提示选 slam bag
+  } else {
+    // slam 背景先于决策日志加载：openDecisionLog 已定位到首条并重填地图，需推给视图
+    frameClock_.start();
+    view_->setSnapshot(fb_->snapshot());
+  }
+}
+
+void ViewerWindow::onOpenSlamBag() {
+  const QString path = QFileDialog::getOpenFileName(
+      this, QString::fromUtf8("打开 slam 地图日志（map_log_*.bag，fb 回放背景）"),
+      defaultBagDir(), "ROS Bag (*.bag)");
+  if (path.isEmpty()) return;
+  openSlamBagFile(path);
+}
+
+void ViewerWindow::openSlamBagFile(const QString& path) {
+  if (!fb_) fb_ = std::make_unique<FastbuildPlayer>();
+  QProgressDialog dlg(
+      QString::fromUtf8("正在加载 %1 …").arg(QFileInfo(path).fileName()),
+      QString(), 0, 1000, this);
+  dlg.setWindowModality(Qt::WindowModal);
+  dlg.setMinimumDuration(200);
+  const bool ok = fb_->openSlamBag(path.toStdString(), [&dlg](double p) {
+    dlg.setValue((int)(p * 1000.0));
+    QCoreApplication::processEvents();
+  });
+  if (!ok) {
+    QMessageBox::warning(this, QString::fromUtf8("打开 Bag 失败"),
+                         path + "\n" + QString::fromStdString(fb_->error()));
+    return;
+  }
+  setSource(Source::FastbuildReplay);
+  frameClock_.start();
+  view_->setSnapshot(fb_->snapshot());
+  refreshReplayUi();
+}
+
+bool ViewerWindow::sourceReplayReady() const {
+  if (source_ == Source::Replay) return player_ && player_->isOpen();
+  if (source_ == Source::FastbuildReplay) return fb_ && fb_->ready();
+  return false;
+}
+
 void ViewerWindow::onPlayPause() {
-  if (source_ != Source::Replay || !(player_ && player_->isOpen())) return;
-  if (player_->isPlaying())
-    player_->pause();
-  else
-    player_->play();
+  if (!sourceReplayReady()) return;
+  if (source_ == Source::FastbuildReplay) {
+    if (fb_->isPlaying())
+      fb_->pause();
+    else
+      fb_->play();
+  } else {
+    if (player_->isPlaying())
+      player_->pause();
+    else
+      player_->play();
+  }
   frameClock_.restart();  // 防暂停期间累积的 dt 在恢复瞬间快进
   refreshReplayUi();
 }
 
 void ViewerWindow::onStepForward() {
-  if (source_ != Source::Replay || !(player_ && player_->isOpen())) return;
-  player_->stepForward();
+  if (!sourceReplayReady()) return;
+  if (source_ == Source::FastbuildReplay)
+    fb_->stepForward();
+  else
+    player_->stepForward();
   frameClock_.restart();
   refreshReplayUi();
 }
 
 void ViewerWindow::onStepBackward() {
-  if (source_ != Source::Replay || !(player_ && player_->isOpen())) return;
-  player_->stepBackward();
+  if (!sourceReplayReady()) return;
+  if (source_ == Source::FastbuildReplay)
+    fb_->stepBackward();
+  else
+    player_->stepBackward();
   frameClock_.restart();
   refreshReplayUi();
 }
@@ -271,22 +387,35 @@ void ViewerWindow::onSeekPressed() { sliderDragging_ = true; }
 
 void ViewerWindow::onSeekReleased() {
   sliderDragging_ = false;
-  if (!(player_ && player_->isOpen())) return;
-  const double dur = player_->durationSec();
+  if (!sourceReplayReady()) return;
+  const double dur = source_ == Source::FastbuildReplay ? fb_->durationSec()
+                                                        : player_->durationSec();
   if (dur <= 0) return;
   const double frac = seekSlider_->value() / 1000.0;
-  player_->seekToTime(player_->bagStart() + ros::Duration(frac * dur));
+  if (source_ == Source::FastbuildReplay)
+    fb_->seekToTime(fb_->bagStart() + ros::Duration(frac * dur));
+  else
+    player_->seekToTime(player_->bagStart() + ros::Duration(frac * dur));
   frameClock_.restart();
   refreshReplayUi();
 }
 
 void ViewerWindow::onSpeedChanged(int idx) {
   const double speeds[] = {0.5, 1.0, 2.0};
-  if (player_) player_->setSpeed(speeds[idx >= 0 && idx <= 2 ? idx : 1]);
+  const double s = speeds[idx >= 0 && idx <= 2 ? idx : 1];
+  if (source_ == Source::FastbuildReplay) {
+    if (fb_) fb_->setSpeed(s);
+  } else if (player_) {
+    player_->setSpeed(s);
+  }
   refreshReplayUi();
 }
 
 void ViewerWindow::refreshReplayUi() {
+  if (source_ == Source::FastbuildReplay) {
+    refreshFastbuildUi();
+    return;
+  }
   if (!(player_ && player_->isOpen())) {
     replayLabel_->setText(QString::fromUtf8("回放：未加载"));
     return;
@@ -301,6 +430,25 @@ void ViewerWindow::refreshReplayUi() {
                             .arg(player_->speed(), 0, 'f', 1));
   btnPlay_->setText(player_->isPlaying() ? QString::fromUtf8("⏸")
                                          : QString::fromUtf8("▶"));
+  if (!sliderDragging_ && dur > 0)
+    seekSlider_->setValue((int)(cur / dur * 1000.0));
+}
+
+void ViewerWindow::refreshFastbuildUi() {
+  if (!(fb_ && fb_->ready())) {
+    replayLabel_->setText(QString::fromUtf8("fastbuild回放：未就绪"));
+    return;
+  }
+  const double dur = fb_->durationSec();
+  const double cur = (fb_->playhead() - fb_->bagStart()).toSec();
+  const size_t rec = fb_->recordIndex() + 1;
+  replayLabel_->setText(QString::fromUtf8("%1 / %2 · 记录 %3/%4 · %5×")
+                            .arg(formatTimeSec(cur), formatTimeSec(dur))
+                            .arg((qulonglong)rec)
+                            .arg((qulonglong)fb_->recordCount())
+                            .arg(fb_->speed(), 0, 'f', 1));
+  btnPlay_->setText(fb_->isPlaying() ? QString::fromUtf8("⏸")
+                                     : QString::fromUtf8("▶"));
   if (!sliderDragging_ && dur > 0)
     seekSlider_->setValue((int)(cur / dur * 1000.0));
 }
@@ -352,6 +500,18 @@ bool ViewerWindow::tryStartRos() {
 }
 
 void ViewerWindow::refreshConnLabel(const SlamSnapshot* snap) {
+  if (source_ == Source::FastbuildReplay) {
+    if (fb_ && fb_->decisionLoaded()) {
+      const std::string& f = fb_->decisionFileName();
+      const size_t slash = f.find_last_of('/');
+      const std::string name = slash == std::string::npos ? f : f.substr(slash + 1);
+      connLabel_->setText(QString::fromUtf8("● fastbuild回放：%1").arg(
+          QString::fromStdString(name)));
+    } else {
+      connLabel_->setText(QString::fromUtf8("● fastbuild回放：未加载（点击 打开决策日志…）"));
+    }
+    return;
+  }
   if (source_ == Source::Replay) {
     if (player_ && player_->isOpen()) {
       connLabel_->setText(QString::fromUtf8("● 回放：%1").arg(
@@ -380,10 +540,16 @@ void ViewerWindow::onConnectPoll() {
 // ---------------------------------------------------------------- 数据泵
 
 void ViewerWindow::onTick() {
-  if (source_ == Source::Replay) {
-    tickReplay();
-  } else {
-    tickLive();
+  switch (source_) {
+    case Source::Replay:
+      tickReplay();
+      break;
+    case Source::FastbuildReplay:
+      tickFastbuildReplay();
+      break;
+    default:
+      tickLive();
+      break;
   }
 }
 
@@ -416,6 +582,33 @@ void ViewerWindow::tickReplay() {
   view_->setSnapshot(snap);
   updatePoseMapLabels(snap);
   refreshReplayUi();
+}
+
+void ViewerWindow::tickFastbuildReplay() {
+  if (!(fb_ && fb_->ready())) return;
+  if (fb_->isPlaying()) {
+    const double dt = frameClock_.restart() / 1000.0;
+    fb_->advance(dt);
+  } else {
+    frameClock_.restart();  // 时钟保持新鲜，恢复播放瞬间 dt 不跳变
+  }
+  const SlamSnapshot& snap = fb_->snapshot();
+  view_->setSnapshot(snap);
+  // 位姿 + 地图标签与实时/回放一致；后面追加决策摘要（fb 模式同时看机器和决策）
+  updatePoseMapLabels(snap);
+  if (snap.decision.has) {
+    const QString dec = snap.decision.hasSelected
+        ? QString::fromUtf8("· 选中点 (%1, %2) · 面积 %3 m²")
+              .arg((double)snap.decision.selX, 0, 'f', 2)
+              .arg((double)snap.decision.selY, 0, 'f', 2)
+              .arg((double)snap.decision.areaM2, 0, 'f', 1)
+        : QString::fromUtf8("· 未选出目标 · 面积 %1 m²")
+              .arg((double)snap.decision.areaM2, 0, 'f', 1);
+    poseLabel_->setText(poseLabel_->text() + "  " + dec);
+  } else {
+    poseLabel_->setText(poseLabel_->text() + QString::fromUtf8("  · 决策：—"));
+  }
+  refreshFastbuildUi();
 }
 
 void ViewerWindow::updatePoseMapLabels(const SlamSnapshot& snap) {

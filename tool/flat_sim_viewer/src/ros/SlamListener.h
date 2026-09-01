@@ -8,6 +8,7 @@
 //         /slam2d/input_cloud   sensor_msgs/PointCloud2   （红）
 //         /slam2d/mapping_cloud sensor_msgs/PointCloud2   （蓝）
 //         /slam2d/pose          geometry_msgs/PoseStamped（蓝箭头）
+//         /fastbuild_task/decision  custom_msgs/FastBuildDecision（决策覆盖层）
 //
 // 回调经全局队列派发（ViewerWindow 的 tickTimer 里 spinOnce），与主循环同线程；
 // snapshot() 仍加锁交换，防未来把订阅挪到独立 spin 线程。
@@ -16,6 +17,7 @@
 #include <cstdint>
 #include <mutex>
 
+#include <custom_msgs/FastBuildDecision.h>
 #include <geometry_msgs/PoseStamped.h>
 #include <nav_msgs/OccupancyGrid.h>
 #include <ros/ros.h>
@@ -38,13 +40,14 @@ class SlamListener {
   void cbInput(const sensor_msgs::PointCloud2::ConstPtr& msg);
   void cbMapping(const sensor_msgs::PointCloud2::ConstPtr& msg);
   void cbPose(const geometry_msgs::PoseStamped::ConstPtr& msg);
+  void cbDecision(const custom_msgs::FastBuildDecision::ConstPtr& msg);
 
   mutable std::mutex mtx_;
   SlamSnapshot snap_;
   uint32_t mapSeq_ = 0;  // 实时源的地图代数（单调递增，传给 SnapshotBuilder）
 
   ros::NodeHandle nh_;
-  ros::Subscriber mapSub_, inputSub_, mappingSub_, poseSub_;
+  ros::Subscriber mapSub_, inputSub_, mappingSub_, poseSub_, decisionSub_;
 };
 
 }  // namespace flat_sim_viewer

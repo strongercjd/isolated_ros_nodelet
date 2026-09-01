@@ -34,6 +34,24 @@ struct SlamSnapshot {
   // 机器人位姿（蓝色箭头）
   bool hasPose = false;
   double poseX = 0.0, poseY = 0.0, poseYaw = 0.0;
+
+  // fastbuild 决策覆盖层（在线：订阅 /fastbuild_task/decision；回放：解析决策日志）。
+  // has == true 时 SlamView 额外绘制候选/选中/拉黑点。
+  struct DecisionOverlay {
+    struct Cand {
+      float x = 0, y = 0;
+      uint32_t size = 0;  // 簇大小（画点半径）
+      uint8_t via = 0;    // 0=直线可达 1=绕行
+    };
+    bool has = false;
+    std::vector<Cand> candidates;
+    bool hasSelected = false;
+    float selX = 0.0f, selY = 0.0f;
+    std::vector<std::pair<float, float>> blacklist;
+    float areaM2 = 0.0f;
+    uint8_t taskState = 0;  // 1=RUNNING 4=DONE
+  };
+  DecisionOverlay decision;
 };
 
 }  // namespace flat_sim_viewer

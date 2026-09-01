@@ -26,6 +26,7 @@ struct FrontierGoal
     double wx = 0.0, wy = 0.0;  // 世界坐标（map 系，栅格中心）
     int col = 0, row = 0;       // 质心所在栅格（取整）
     size_t size = 0;            // 簇大小（候选排序用）
+    uint8_t via = 0;            // 0=直线可达 1=绕行（pickAndSendGoal 决策时填，决策日志用）
 };
 
 namespace frontier_detail

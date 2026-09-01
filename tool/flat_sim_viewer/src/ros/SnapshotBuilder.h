@@ -8,6 +8,7 @@
 
 #include <vector>
 
+#include <custom_msgs/FastBuildDecision.h>
 #include <geometry_msgs/PoseStamped.h>
 #include <nav_msgs/OccupancyGrid.h>
 #include <sensor_msgs/PointCloud2.h>
@@ -31,6 +32,9 @@ void applyPose(SlamSnapshot& snap, const geometry_msgs::PoseStamped& msg);
 
 void applyInputCloud(SlamSnapshot& snap, const sensor_msgs::PointCloud2& msg);
 void applyMappingCloud(SlamSnapshot& snap, const sensor_msgs::PointCloud2& msg);
+
+// fastbuild 决策覆盖层：从决策消息填充 candidates / selected / blacklist / area / task_state
+void applyDecision(SlamSnapshot& snap, const custom_msgs::FastBuildDecision& msg);
 
 }  // namespace snapshot_builder
 }  // namespace flat_sim_viewer

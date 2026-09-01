@@ -2,6 +2,8 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
+#include <string>
 
 namespace
 {
@@ -9,6 +11,14 @@ namespace
 double yawFromQuat(double x, double y, double z, double w)
 {
     return std::atan2(2.0 * (w * z + x * y), 1.0 - 2.0 * (y * y + z * z));
+}
+
+// 两位小数的浮点格式化（决策日志 JSON 用，避免引入 nlohmann 依赖）
+std::string fmt2(double v)
+{
+    char buf[64];
+    std::snprintf(buf, sizeof buf, "%.2f", v);
+    return buf;
 }
 
 } // namespace
@@ -38,6 +48,7 @@ void FastbuildTaskNodelet::onInit()
     navi_cmd_pub_ = pnh.advertise<custom_msgs::NaviCmd>("/base_navi/cmd", 5);
     vel_pub_ = pnh.advertise<geometry_msgs::Twist>("/mycar/cmd_vel", 5);
     state_pub_ = pnh.advertise<custom_msgs::TaskState>("/fastbuild_task/state", 5, true /*latch：迟订阅者也能拿到终态*/);
+    decision_pub_ = pnh.advertise<custom_msgs::FastBuildDecision>("/fastbuild_task/decision", 5);
 
     decision_timer_ = pnh.createTimer(ros::Duration(1.0), &FastbuildTaskNodelet::decisionTimer, this);//1Hz 选点决策
     watchdog_ = pnh.createTimer(ros::Duration(5.0), &FastbuildTaskNodelet::watchdogTimer, this);//5s看门狗
@@ -79,6 +90,7 @@ void FastbuildTaskNodelet::taskCmdCallback(const custom_msgs::FastBuildCmd::Cons
         NODELET_INFO("task START (seq=%u type=%s map_type=%d from_charger=%d)", msg->seq,
                      msg->type.c_str(), msg->map_type, msg->start_from_charger ? 1 : 0);
         publishTaskState(custom_msgs::TaskState::STATE_RUNNING, 255, 0.0, 0.0);//发布快建任务状态
+        publishDecision({}, false, 0.0, 0.0, custom_msgs::TaskState::STATE_RUNNING);//任务开始边界标记
         sendNaviCmd(custom_msgs::NaviCmd::CMD_START);//使能导航（执行器进入待命，等 CMD_GOAL）
     }
     else if (msg->cmd == custom_msgs::FastBuildCmd::CMD_CANCEL)
@@ -215,20 +227,21 @@ void FastbuildTaskNodelet::pickAndSendGoal()
         last_pick_count_ = map_count_;
     }
 
-    const std::vector<FrontierGoal> goals = detectFrontiers(map, frontier_params_);
+    std::vector<FrontierGoal> goals = detectFrontiers(map, frontier_params_);
 
     // 重选：剔除拉黑区，最近优先；直线穿墙的候选重罚（+8m 虚拟距离），
     // 避免选中墙对面目标后纯跟踪控制律一路顶死。全候选被挡时惩罚均摊，退化为旧行为
     const FrontierGoal *best = nullptr;
     double best_key = 1e9;
     bool best_direct = false;
-    for (const auto &g : goals)
+    for (auto &g : goals)
     {
         if (isBlacklisted(g.wx, g.wy))
             continue;
         const double dist = std::hypot(g.wx - pose.pose.position.x, g.wy - pose.pose.position.y);
         const bool direct = lineReachable(map, pose.pose.position.x, pose.pose.position.y,
                                           g.wx, g.wy, frontier_params_);
+        g.via = direct ? 0 : 1; // 记录给决策日志（flat_sim_viewer 画点区分）
         double key = dist - g.size * 0.001; // 距离为主，簇大小做次级偏好
         if (!direct)
             key += 8.0;
@@ -244,6 +257,7 @@ void FastbuildTaskNodelet::pickAndSendGoal()
     {
         // 对齐 explorestatestopcount：连续选不出可达目标即累计。
         // 候选非空但全被拉黑同样属于"无可达目标"（否则机器人零速悬停到 watchdog）
+        publishDecision(goals, false, 0.0, 0.0, custom_msgs::TaskState::STATE_RUNNING);
         ++no_target_count_;
         NODELET_WARN("no reachable goal for %u/%d rounds (candidates=%zu)",
                      no_target_count_, stop_count_limit_, goals.size());
@@ -258,6 +272,7 @@ void FastbuildTaskNodelet::pickAndSendGoal()
                  best->wx, best->wy, best->size,
                  std::hypot(best->wx - pose.pose.position.x, best->wy - pose.pose.position.y),
                  best_direct ? "line" : "detour");
+    publishDecision(goals, true, best->wx, best->wy, custom_msgs::TaskState::STATE_RUNNING);
 }
 
 /**
@@ -285,6 +300,7 @@ void FastbuildTaskNodelet::finishTask(uint8_t reason, const char *why)
     publishTaskState(custom_msgs::TaskState::STATE_DONE, reason, latest_area_m2_, cost);
     NODELET_INFO("task DONE: reason=%u (%s) area=%.1f m2 cost=%.0f s", reason, why,
                  latest_area_m2_, cost);
+    publishDecision({}, false, 0.0, 0.0, custom_msgs::TaskState::STATE_DONE);//任务结束边界标记
 }
 /**
  * @brief 发送导航命令
@@ -319,6 +335,83 @@ void FastbuildTaskNodelet::sendGoal(double x, double y)
     goal_x_ = x;
     goal_y_ = y;
 }
+/**
+ * @brief 发布一次决策：ROS 话题 /fastbuild_task/decision + 落盘 FASTBUILD_DECISION 行。
+ * 供 flat_sim_viewer 在线显示（订阅话题）与日志回放（解析 custom_ros_nodelet.log，
+ * 按时间戳与 map_log bag 匹配）。候选传全量（含被拉黑剔除的），选中点由调用方给。
+ * @param goals       本轮全部候选点位（frontier 检测结果）
+ * @param has_selected 是否选出目标
+ * @param sel_x       最终选中的目标点 x（has_selected 为真时有效）
+ * @param sel_y       最终选中的目标点 y
+ * @param task_state  任务状态（对齐 TaskState：1=RUNNING 4=DONE）
+ */
+void FastbuildTaskNodelet::publishDecision(const std::vector<FrontierGoal> &goals, bool has_selected,
+                                           double sel_x, double sel_y, uint8_t task_state)
+{
+    std::vector<std::pair<double, double>> blacklist;
+    double area;
+    {
+        std::lock_guard<std::mutex> lk(mtx_);
+        blacklist = blacklist_;
+        area = latest_area_m2_;
+    }
+
+    custom_msgs::FastBuildDecision msg;
+    msg.seq = ++seq_;
+    msg.stamp = ros::Time::now();
+    msg.has_selected = has_selected;
+    msg.selected_x = static_cast<float>(sel_x);
+    msg.selected_y = static_cast<float>(sel_y);
+    msg.area_m2 = static_cast<float>(area);
+    msg.task_state = task_state;
+    for (const auto &g : goals)
+    {
+        custom_msgs::FastBuildPoint pt;
+        pt.x = static_cast<float>(g.wx);
+        pt.y = static_cast<float>(g.wy);
+        pt.theta = 0.0f;
+        msg.candidates.push_back(pt);
+        msg.candidate_size.push_back(static_cast<uint32_t>(g.size));
+        msg.candidate_via.push_back(g.via);
+    }
+    for (const auto &b : blacklist)
+    {
+        custom_msgs::FastBuildPoint pt;
+        pt.x = static_cast<float>(b.first);
+        pt.y = static_cast<float>(b.second);
+        pt.theta = 0.0f;
+        msg.blacklist.push_back(pt);
+    }
+    decision_pub_.publish(msg);
+
+    // 落盘单行 JSON（数值型字段无转义问题）：sec/nsec 是与 slam bag 匹配的权威时间戳
+    std::string j;
+    j.reserve(128 + goals.size() * 48 + blacklist.size() * 32);
+    j = "{\"seq\":" + std::to_string(msg.seq) + ",\"sec\":" + std::to_string(msg.stamp.sec) +
+        ",\"nsec\":" + std::to_string(msg.stamp.nsec) + ",\"task_state\":" +
+        std::to_string(msg.task_state) + ",\"area\":" + fmt2(msg.area_m2) +
+        ",\"has_selected\":" + (has_selected ? "true" : "false") +
+        ",\"sel_x\":" + fmt2(msg.selected_x) + ",\"sel_y\":" + fmt2(msg.selected_y) +
+        ",\"candidates\":[";
+    for (size_t i = 0; i < goals.size(); ++i)
+    {
+        if (i)
+            j += ",";
+        j += "{\"x\":" + fmt2(goals[i].wx) + ",\"y\":" + fmt2(goals[i].wy) +
+             ",\"size\":" + std::to_string(goals[i].size) +
+             ",\"via\":" + std::to_string(goals[i].via) + "}";
+    }
+    j += "],\"blacklist\":[";
+    for (size_t i = 0; i < blacklist.size(); ++i)
+    {
+        if (i)
+            j += ",";
+        j += "{\"x\":" + fmt2(blacklist[i].first) + ",\"y\":" + fmt2(blacklist[i].second) + "}";
+    }
+    j += "]}";
+    NODELET_INFO("FASTBUILD_DECISION %s", j.c_str());
+}
+
 /**
  * @brief 发布快建任务状态
  * @param state 任务状态
