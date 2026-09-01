@@ -102,7 +102,7 @@ ViewerWindow::ViewerWindow(QWidget* parent, const std::string& initialBag)
 
   connectTimer_->start();
   tickTimer_->start();
-  updatePlayerBarEnabled();
+  updatePlayerBarState();
 
   if (!initialBag.empty()) {
     const std::string bag = initialBag;
@@ -178,13 +178,20 @@ void ViewerWindow::buildPlayerBar() {
 void ViewerWindow::setSource(Source m) {
   source_ = m;
   if (m == Source::Live && player_) player_->pause();
-  updatePlayerBarEnabled();
+  updatePlayerBarState();
   refreshConnLabel(nullptr);
 }
 
-void ViewerWindow::updatePlayerBarEnabled() {
+void ViewerWindow::updatePlayerBarState() {
+  // 实时模式隐藏全部回放控件（只留 实时|回放 切换）；回放模式显示，未加载时置灰
   const bool replay = source_ == Source::Replay;
   const bool ready = replay && player_ && player_->isOpen();
+  for (QWidget* w : {static_cast<QWidget*>(btnOpen_), static_cast<QWidget*>(btnPrev_),
+                     static_cast<QWidget*>(btnPlay_), static_cast<QWidget*>(btnNext_),
+                     static_cast<QWidget*>(seekSlider_), static_cast<QWidget*>(speedBox_),
+                     static_cast<QWidget*>(replayLabel_)}) {
+    w->setVisible(replay);
+  }
   btnOpen_->setEnabled(replay);
   btnPlay_->setEnabled(ready);
   btnPrev_->setEnabled(ready);
@@ -193,9 +200,19 @@ void ViewerWindow::updatePlayerBarEnabled() {
   speedBox_->setEnabled(ready);
 }
 
+QString ViewerWindow::defaultBagDir() {
+  // .../tool/flat_sim_viewer/install/bin → 上 4 级为仓库根
+  QDir dir = QCoreApplication::applicationDirPath();
+  if (dir.cdUp() && dir.cdUp() && dir.cdUp() && dir.cdUp()) {
+    const QString cand = dir.filePath("app_runtime/data/log");
+    if (QFileInfo(cand).isDir()) return cand;
+  }
+  return QDir::homePath();
+}
+
 void ViewerWindow::onOpenBag() {
   const QString path = QFileDialog::getOpenFileName(
-      this, QString::fromUtf8("打开 SLAM 日志（map_log_*.bag）"), QDir::homePath(),
+      this, QString::fromUtf8("打开 SLAM 日志（map_log_*.bag）"), defaultBagDir(),
       "ROS Bag (*.bag)");
   if (!path.isEmpty()) openBagFile(path);
 }
@@ -224,9 +241,10 @@ void ViewerWindow::openBagFile(const QString& path) {
   }
 
   player_ = std::move(candidate);
-  frameClock_.start();
   btnReplay_->setChecked(true);  // 可能已在回放模式（toggled 不触发）
   setSource(Source::Replay);
+  player_->play();  // 加载完成直接播放
+  frameClock_.start();
   view_->setSnapshot(player_->snapshot());  // 第一帧立即上屏
   refreshReplayUi();
 }

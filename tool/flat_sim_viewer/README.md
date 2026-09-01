@@ -101,9 +101,10 @@ tool/flat_sim_viewer/
 
 窗口底部播放条左侧两个按钮切换数据源（渲染层共用，随时互切）：
 
-- **实时**（默认）：订阅 `/slam2d/*`，与旧版行为一致
-- **回放**：点击 `打开 Bag…` 选择日志文件（`map_log_nodelet` 录制的
-  `app_runtime/data/log/map_log_*.bag`），或启动时 `--bag <file>` 直达
+- **实时**（默认）：订阅 `/slam2d/*`，与旧版行为一致；此时回放控件全部隐藏
+- **回放**：自动弹出文件对话框（起始目录即 `app_runtime/data/log/`）选择日志
+  （`map_log_nodelet` 录制的 `map_log_*.bag`），或启动时 `--bag <file>` 直达。
+  **加载完成后自动开始播放**
 
 回放为完整播放器：
 

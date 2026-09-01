@@ -103,6 +103,7 @@ class BagPlayer {
   uint32_t mapSeqOut_ = 0;  // seq 高水位：跨回退仍单调递增（SlamView 据此重建 QImage）
   size_t idx_ = 0;          // 已应用到 events_[idx_)
   ros::Time head_;          // 当前时间轴位置 = events_[idx_-1].t（idx_==0 为首事件时间）
+  double pending_ = 0;      // advance 未消耗的 bag 时间余量（跨事件间隙累积，见 advance 注释）
   bool playing_ = false;
   double speed_ = 1.0;
 

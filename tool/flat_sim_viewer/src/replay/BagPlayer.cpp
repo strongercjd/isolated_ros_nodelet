@@ -96,6 +96,7 @@ void BagPlayer::close() {
   snap_ = SlamSnapshot{};
   idx_ = 0;
   nextCpAt_ = 0;
+  pending_ = 0;
   head_ = ros::Time(0);
   path_.clear();
   err_.clear();
@@ -136,22 +137,35 @@ size_t BagPlayer::frameIndex() const {
 void BagPlayer::play() {
   if (events_.empty()) return;
   if (atEnd()) rebuildTo(0);  // 到尾重播：从头重建
+  pending_ = 0;               // 跳转后的余量作废，从当前位置重新累积
   playing_ = true;
 }
 
 void BagPlayer::advance(double wallDtSec) {
   if (!playing_ || events_.empty()) return;
-  const ros::Time boundary = head_ + ros::Duration(wallDtSec * speed_);
+  // 余量累积：单帧 dt（如 30ms）可能小于事件间隙（如 40ms），boundary 若只从
+  // head_ 起算将永远够不到下一事件（head_ 不动则 boundary 不动）→ 死锁。
+  // 未消耗的时间留到下一帧继续累积。
+  pending_ += wallDtSec * speed_;
+  if (pending_ <= 0) return;
+  const ros::Time boundary = head_ + ros::Duration(pending_);
   // 应用所有 time <= boundary 的事件
   size_t target = std::upper_bound(events_.begin(), events_.end(), boundary,
                                    [](const ros::Time& t, const Event& ev) { return t < ev.t; }) -
                   events_.begin();
-  if (target > idx_) applyTo(target);
-  if (target >= events_.size()) playing_ = false;  // 到尾自动暂停
+  if (target > idx_) {
+    applyTo(target);
+    pending_ = (boundary - head_).toSec();  // head_ 已对齐最后一事件，剩余为余量
+  }
+  if (target >= events_.size()) {
+    playing_ = false;  // 到尾自动暂停
+    pending_ = 0;
+  }
 }
 
 void BagPlayer::stepForward() {
   playing_ = false;
+  pending_ = 0;
   if (events_.empty()) return;
   const size_t slot = curFrameSlot();
   if (slot >= poseFrames_.size()) {
@@ -164,6 +178,7 @@ void BagPlayer::stepForward() {
 
 void BagPlayer::stepBackward() {
   playing_ = false;
+  pending_ = 0;
   if (events_.empty()) return;
   const size_t slot = curFrameSlot();  // = 已应用 pose 数；当前帧 = slot-1（0 基）
   if (slot < 2) return;                // 已在第 0 帧或无 pose，不能再退
@@ -172,6 +187,7 @@ void BagPlayer::stepBackward() {
 
 void BagPlayer::seekToTime(const ros::Time& t) {
   if (events_.empty()) return;
+  pending_ = 0;
   size_t target = std::upper_bound(events_.begin(), events_.end(), t,
                                    [](const ros::Time& tt, const Event& ev) { return tt < ev.t; }) -
                   events_.begin();

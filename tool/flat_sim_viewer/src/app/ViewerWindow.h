@@ -67,8 +67,9 @@ class ViewerWindow : public QMainWindow {
 
   void buildPlayerBar();
   void setSource(Source m);             // 只切分派与控件态，不触碰 ROS 生命周期
-  void updatePlayerBarEnabled();
-  void openBagFile(const QString& path);  // 加载（带进度）→ 成功切回放
+  void updatePlayerBarState();          // 回放控件的显示/隐藏与可用态
+  void openBagFile(const QString& path);  // 加载（带进度）→ 成功切回放并自动播放
+  static QString defaultBagDir();       // 对话框起始目录：仓库 app_runtime/data/log
   void tickLive();
   void tickReplay();
   void refreshReplayUi();  // 播放按钮态 / 进度条回写 / 时间与帧号标签
