@@ -173,9 +173,17 @@ inline double freeAreaM2(const nav_msgs::OccupancyGrid &map, int occ_free_th)
     return static_cast<double>(n) * map.info.resolution * map.info.resolution;
 }
 
-// 直线可达性：从 (x0,y0) 到 (x1,y1) 沿线半格步长采样，每点检查通行窗口内无 occupied。
-// unknown 不算阻挡（frontier 本身邻接 unknown，按阻挡判会永远选不到目标）。
-// 用于目标选择的代价惩罚：目标在墙对面时直线必穿 occupied 窗口，纯跟踪控制律会顶死。
+/**
+ * @brief 检查从 (x0,y0) 到 (x1,y1) 是否直线可达
+ * @param map 地图
+ * @param x0 起始点 x
+ * @param y0 起始点 y
+ * @param x1 目标点 x
+ * @param y1 目标点 y
+ * @param p 直线可达性参数
+ * @return true 可达
+ * @return false 不可达
+ */
 inline bool lineReachable(const nav_msgs::OccupancyGrid &map, double x0, double y0,
                           double x1, double y1, const FrontierParams &p)
 {

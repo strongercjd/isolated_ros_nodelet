@@ -41,7 +41,9 @@ private:
     void watchdogTimer(const ros::TimerEvent &); // 5s：任务总时长兜底
 
     // ---- 决策 ----
-    void pickAndSendGoal();                 // 在当前地图上选点并下发（同图只选一次）
+    void pickAndSendGoal();                 // 取当前地图自行检测候选，选点下发（REACHED/ABORT 接续路径）
+    // 复用调用方已检测的候选选点下发：同一张图只检测/选点一次（同图只选一次）
+    void pickAndSendGoal(const nav_msgs::OccupancyGrid &map, std::vector<FrontierGoal> goals);
     void maintainGoalOnMap(const nav_msgs::OccupancyGrid &map); // 新地图：在途目标失效判定 / 无目标选点
     void finishTask(uint8_t reason, const char *why);
     void sendNaviCmd(uint8_t cmd);

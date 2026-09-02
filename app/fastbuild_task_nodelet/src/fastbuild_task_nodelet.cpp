@@ -188,10 +188,12 @@ void FastbuildTaskNodelet::decisionTimer(const ros::TimerEvent &)
  */
 void FastbuildTaskNodelet::maintainGoalOnMap(const nav_msgs::OccupancyGrid &map)
 {
+    // 本张新图只检测一次 frontier：失效判定与后续重选共用同一候选集
+    std::vector<FrontierGoal> goals = detectFrontiers(map, frontier_params_);
+
     if (goal_in_flight_)
     {
         // 失效判定：候选簇里已找不到 1m 内的对应簇（簇消失/被并入占用区）
-        const std::vector<FrontierGoal> goals = detectFrontiers(map, frontier_params_);
         double nearest = 1e9;
         for (const auto &g : goals)
             nearest = std::min(nearest, std::hypot(g.wx - goal_x_, g.wy - goal_y_));
@@ -204,18 +206,16 @@ void FastbuildTaskNodelet::maintainGoalOnMap(const nav_msgs::OccupancyGrid &map)
             goal_in_flight_ = false;
         }
     }
-    pickAndSendGoal();
+    pickAndSendGoal(map, std::move(goals));
 }
 
 /**
- * @brief 在当前地图上选点并下发给 base_navi。
- * 同一张地图只选一次（防 REACHED 快速重触发下同图反复选点）；
- * 选不出可达目标时随新地图累计 no_target_count，到限即任务自然结束。
+ * @brief 锁内取当前地图、自行 frontier 检测后选点下发（REACHED/ABORT 接续路径用）。
+ * 前置守卫只是省去无谓的全图检测，同图只选一次的判定在带参版本锁内原子完成。
  */
 void FastbuildTaskNodelet::pickAndSendGoal()
 {
     nav_msgs::OccupancyGrid map;
-    geometry_msgs::PoseStamped pose;
     {
         std::lock_guard<std::mutex> lk(mtx_);
         if (map_count_ == 0)
@@ -223,11 +223,27 @@ void FastbuildTaskNodelet::pickAndSendGoal()
         if (map_count_ == last_pick_count_)
             return; // 本图已选过：等下一张
         map = latest_map_;
+    }
+    pickAndSendGoal(map, detectFrontiers(map, frontier_params_));
+}
+
+/**
+ * @brief 在给定地图与候选集上选点并下发给 base_navi（候选复用失效判定的检测结果，
+ * 同一张图不重复做全图 frontier 检测）。
+ * 同一张地图只选一次（防 REACHED 快速重触发下同图反复选点）；
+ * 选不出可达目标时随新地图累计 no_target_count，到限即任务自然结束。
+ */
+void FastbuildTaskNodelet::pickAndSendGoal(const nav_msgs::OccupancyGrid &map,
+                                           std::vector<FrontierGoal> goals)
+{
+    geometry_msgs::PoseStamped pose;
+    {
+        std::lock_guard<std::mutex> lk(mtx_);
+        if (map_count_ == 0 || map_count_ == last_pick_count_)
+            return; // 守卫与置位同锁原子：并发接续路径下同图仍只选一次
         pose = pose_;
         last_pick_count_ = map_count_;
     }
-
-    std::vector<FrontierGoal> goals = detectFrontiers(map, frontier_params_);
 
     // 重选：剔除拉黑区，最近优先；直线穿墙的候选重罚（+8m 虚拟距离），
     // 避免选中墙对面目标后纯跟踪控制律一路顶死。全候选被挡时惩罚均摊，退化为旧行为
@@ -238,9 +254,9 @@ void FastbuildTaskNodelet::pickAndSendGoal()
     {
         if (isBlacklisted(g.wx, g.wy))
             continue;
-        const double dist = std::hypot(g.wx - pose.pose.position.x, g.wy - pose.pose.position.y);
+        const double dist = std::hypot(g.wx - pose.pose.position.x, g.wy - pose.pose.position.y);// 计算目标点到机器人当前位置的距离
         const bool direct = lineReachable(map, pose.pose.position.x, pose.pose.position.y,
-                                          g.wx, g.wy, frontier_params_);
+                                          g.wx, g.wy, frontier_params_);// 检查从机器人当前位置到目标点是否直线可达
         g.via = direct ? 0 : 1; // 记录给决策日志（flat_sim_viewer 画点区分）
         double key = dist - g.size * 0.001; // 距离为主，簇大小做次级偏好
         if (!direct)
@@ -445,7 +461,13 @@ void FastbuildTaskNodelet::blacklistTarget(double x, double y)
     if (blacklist_.size() > 16)
         blacklist_.erase(blacklist_.begin()); // 上限保护：淘汰最旧
 }
-
+/**
+ * @brief 检查目标点是否被拉黑
+ * @param x 目标点 x
+ * @param y 目标点 y
+ * @return true 被拉黑
+ * @return false 未被拉黑
+ */
 bool FastbuildTaskNodelet::isBlacklisted(double x, double y) const
 {
     for (const auto &b : blacklist_)
