@@ -37,11 +37,13 @@ endforeach()
 # 这里各库显式 STATIC：flat_sim_node 链成单文件可执行，安装后无额外 so 依赖。
 
 # ---- core：几何 / 世界 / 仿真（不依赖 ROS 与 GUI）----
-add_library(flat_sim_core STATIC src/core/Geometry.cpp src/core/Simulator.cpp)
+add_library(flat_sim_core STATIC src/core/Geometry.cpp src/core/Simulator.cpp
+                                   src/core/GridLayerTools.cpp)
 target_include_directories(flat_sim_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
 
-# ---- format：自研 .fworld / .frobot 解析（# 备注在解析层丢弃）----
-add_library(flat_sim_format STATIC src/format/TextFormat.cpp src/format/WorldLoader.cpp)
+# ---- format：自研 .fworld / .frobot 解析 + 序列化（# 备注在解析层丢弃）----
+add_library(flat_sim_format STATIC src/format/TextFormat.cpp src/format/WorldLoader.cpp
+                                       src/format/WorldWriter.cpp)
 target_link_libraries(flat_sim_format PUBLIC flat_sim_core)
 
 # ---- gui：Qt6 2D 俯视图（可选；headless 构建完全不链 Qt）----

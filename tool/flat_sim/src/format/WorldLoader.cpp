@@ -169,6 +169,7 @@ WorldDesc loadWorld(const std::string& path) {
         if (!kWorldFields.count(f.key)) warn(path, f.line, "world 忽略未知字段: " + f.key);
     } else if (c.key == "wall" || c.key == "box") {
       BoxObstacle b;
+      b.isWall = (c.key == "wall");  // 保存时还原 wall/box 标签
       b.name = parseName(c, path, c.key + "_" + std::to_string(w.boxes.size() + 1));
       if ((n = c.find("pose")) != nullptr) {
         b.pose = parsePose(*n, path);
@@ -213,6 +214,73 @@ WorldDesc loadWorld(const std::string& path) {
       RobotDesc rd = loadRobotFile(full);
       if ((n = c.find("pose")) != nullptr) rd.pose = parsePose(*n, path);  // 世界内覆盖位姿
       w.robots.push_back(rd);
+    } else if (c.key == "annotation") {
+      // 测量标注：辅助线，不参与仿真
+      Annotation an;
+      if ((n = c.find("from")) != nullptr) {
+        const std::vector<double> v = format::toDoubleList(*n, 2, path);
+        an.from = Vec2{v[0], v[1]};
+      } else {
+        throw FormatError(path, c.line, "annotation 缺少 from: [x, y]");
+      }
+      if ((n = c.find("to")) != nullptr) {
+        const std::vector<double> v = format::toDoubleList(*n, 2, path);
+        an.to = Vec2{v[0], v[1]};
+      } else {
+        throw FormatError(path, c.line, "annotation 缺少 to: [x, y]");
+      }
+      w.annotations.push_back(an);
+    } else if (c.key == "editwall") {
+      // 用户编辑墙格层：占用的行按 run 编码
+      GridLayer gl;
+      if ((n = c.find("cell_size")) != nullptr) {
+        gl.cell = format::toDouble(*n, path);
+        if (gl.cell <= 0) throw FormatError(path, n->line, "editwall cell_size 必须为正数");
+      } else {
+        gl.cell = 0.1;
+      }
+      if ((n = c.find("origin")) != nullptr) {
+        const std::vector<double> v = format::toDoubleList(*n, 2, path);
+        gl.ox = v[0];
+        gl.oy = v[1];
+      }
+      if ((n = c.find("size")) != nullptr) {
+        const std::vector<double> v = format::toDoubleList(*n, 2, path);
+        gl.cols = (int)v[0];
+        gl.rows = (int)v[1];
+        if (gl.cols <= 0 || gl.rows <= 0)
+          throw FormatError(path, n->line, "editwall size 应为 [列数, 行数] 且均为正整数");
+      }
+      if (gl.cols <= 0 || gl.rows <= 0)
+        throw FormatError(path, c.line, "editwall 缺少 size: [列数, 行数]");
+      // active: 1 表示权威占用层（含栅格化的原障碍），缺省为旧的"仅用户墙"叠加层
+      if ((n = c.find("active")) != nullptr) gl.active = format::toInt(*n, path) != 0;
+      gl.occ.assign((size_t)gl.cols * gl.rows, 0);
+      // row: <行号> <列起>-<列止>[, <列起>-<列止>...]
+      static const std::set<std::string> kEditWallFields{"cell_size", "origin", "size", "active", "row"};
+      for (const Node& rr : c.children) {
+        if (rr.key != "row") {
+          if (!kEditWallFields.count(rr.key))
+            warn(path, rr.line, "editwall 忽略未知字段: " + rr.key);
+          continue;
+        }
+        std::string v = format::scalarValue(rr, path);
+        for (char& ch : v)  // 分隔符统一按空白处理（容忍手写逗号）
+          if (ch == ',') ch = ' ';
+        std::istringstream is(v);
+        int j = 0;
+        is >> j;
+        std::string seg;
+        while (is >> seg) {
+          const size_t dash = seg.find('-');
+          if (dash == std::string::npos)
+            throw FormatError(path, rr.line, "editwall row 段应为 列起-列止: \"" + seg + "\"");
+          const int i0 = std::stoi(seg.substr(0, dash));
+          const int i1 = std::stoi(seg.substr(dash + 1));
+          for (int i = i0; i <= i1; ++i) gl.set(i, j, true);
+        }
+      }
+      w.editGrid = gl;
     } else {
       warn(path, c.line, "忽略未知顶层块: " + c.key);
     }

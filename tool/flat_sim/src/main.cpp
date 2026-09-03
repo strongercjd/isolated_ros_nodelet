@@ -42,7 +42,9 @@ void usage() {
       "  -h, --help       本说明\n"
       "\n"
       "ROS 参数: ~sim_time:=true   消息时间戳用仿真时间（默认 wall time）\n"
-      "GUI 按键: ESC / q 退出  |  l 开关激光显示  |  r 复位机器人并同步复位 SLAM\n"
+      "GUI 菜单: 模式→查看/编辑（编辑时暂停仿真）；文件→另存为新 .fworld；\n"
+      "          工具→测量距离/格子边长/辅助显示；运行→复位机器人/激光；帮助→操作说明\n"
+      "GUI 按键: ESC/q 退出  |  l 开关激光  |  f 整窗适配\n"
       "SLAM 建图视图：另见 tool/flat_sim_viewer（独立查看工具）");
 }
 

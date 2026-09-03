@@ -20,7 +20,12 @@ SimRunner::SimRunner(WorldDesc world, int argc, char** argv)
       dt_(world_.timestepMs / 1000.0),
       sim_(world_),
       argc_(argc),
-      argv_(argv) {}
+      argv_(argv) {
+  // 编辑墙格层：从 .fworld 的 editwall 内容建共享实例，注入 Simulator（headless 同样生效）
+  editGrid_ = std::make_shared<GridLayer>();
+  editGrid_->copyFrom(world_.editGrid);
+  sim_.setEditGrid(editGrid_);
+}
 
 // 探测 ROS_MASTER_URI（http://host:port）端口是否可连。
 // 用裸 socket 而不用 ros::master::check()：后者要求 ros::init 已执行。
@@ -60,12 +65,12 @@ bool SimRunner::tryStartRos() {
   // 注意：ros::init / NodeHandle 必须等 master 可达后才碰——roscpp 一旦
   // ros::start() 就会开后台线程向 master 注册并无限重试刷屏。
   ros::init(argc_, argv_, "flat_sim", ros::init_options::NoRosout);
-  bool useSimTime = false;
+  useSimTime_ = false;
   {
     ros::NodeHandle pnh("~");
-    pnh.param("sim_time", useSimTime, false);
+    pnh.param("sim_time", useSimTime_, false);
   }
-  bridge_.reset(new RosBridge(sim_, useSimTime));
+  bridge_.reset(new RosBridge(sim_, useSimTime_));
   rosRunning_ = true;
   std::fprintf(stderr, "[flat_sim] rosmaster 就绪（%s），话题已启用\n",
                std::getenv("ROS_MASTER_URI") ? std::getenv("ROS_MASTER_URI") : "?");
@@ -88,6 +93,19 @@ void SimRunner::reset() {
   sim_.reset();
   // 联动复位 SLAM（否则 odom 跳变会打爆建图）
   if (bridge_) bridge_->publishSlamReset();
+}
+
+std::shared_ptr<GridLayer> SimRunner::loadWorld(WorldDesc newWorld) {
+  bridge_.reset();  // 先释放对旧 sim_ 的引用，再整体替换 sim_
+  world_ = std::move(newWorld);
+  dt_ = world_.timestepMs / 1000.0;
+  editGrid_ = std::make_shared<GridLayer>();
+  editGrid_->copyFrom(world_.editGrid);
+  sim_ = Simulator(world_);
+  sim_.setEditGrid(editGrid_);
+  // ROS 已连时重建桥（订阅/发布话题随机器人变化重建；ros::init 不重复调用）
+  if (rosRunning_) bridge_.reset(new RosBridge(sim_, useSimTime_));
+  return editGrid_;
 }
 
 }  // namespace flat_sim

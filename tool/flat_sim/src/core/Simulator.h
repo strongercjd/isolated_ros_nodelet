@@ -3,6 +3,7 @@
 #pragma once
 
 #include <cstdint>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -51,15 +52,26 @@ class Simulator {
   // 所有机器人回到初始位姿并清零速度
   void reset();
 
+  // 编辑墙占据层：与 GUI 共用同一 shared_ptr 实例，编辑即生效（挡激光/挡运动）。
+  void setEditGrid(std::shared_ptr<GridLayer> g) { editGrid_ = std::move(g); }
+  const GridLayer* editGrid() const { return editGrid_ ? editGrid_.get() : nullptr; }
+  // 网格被改后重算各机器人当前一帧激光（GUI 暂停期间编辑完调用）
+  void recomputeScans() {
+    for (RobotState& r : robots_) updateLasers(r);
+  }
+
   uint64_t steps() const { return steps_; }
   double simTime() const { return simTime_; }
 
  private:
   bool blocked(const RobotState& self, Vec2 center) const;
   double castRay(Vec2 o, Vec2 d, const RobotState* self) const;
+  // 编辑格层 DDA 求交：射线最先进入"占用格"的 t；无命中 / 出界返回 -1
+  double gridRay(Vec2 o, Vec2 d) const;
   void updateLasers(RobotState& r);
 
   WorldDesc world_;
+  std::shared_ptr<GridLayer> editGrid_;  // 可选：用户编辑墙（与 GUI 共享）
   std::vector<RobotState> robots_;
   uint64_t steps_ = 0;
   double simTime_ = 0.0;
